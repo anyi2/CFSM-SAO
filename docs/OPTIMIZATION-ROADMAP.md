@@ -18,7 +18,7 @@
 
 ## 安全审计状态
 
-2026-11-15 的 GitHub Actions npm audit 快照：14 项（9 中危、5 高危、0 严重）。Zod 3.25.76 的高危修复要求升级到 Zod 4.6.7（主版本变更）；当前保留兼容边界并增加响应大小限制，不能将此缓解描述为漏洞已修复。TypeScript ESLint 与 minimatch 的剩余中危项也需要单独评估升级路径。CI 尝试用 npm audit fix 时，Runner 的 npm 内部出现 `edgesOut` 错误；因此采用普通 `npm update --package-lock-only` 在当前 semver 范围内刷新依赖，再经完整测试，审计报告作为 Actions artifact 保存。最终以最新审计报告数字为准。
+2026-11-15 的 GitHub Actions npm audit 快照：14 项（9 中危、5 高危、0 严重）。高危依赖包括 `brace-expansion`、`source-map-js`、`undici`、`vite` 和 `zod`；中危项涉及 TypeScript ESLint、`minimatch` 与 Vitest。Zod 3.25.76 的高危修复要求升级到 Zod 4.6.7（主版本变更）；当前保留兼容边界并增加响应大小限制，不能将此缓解描述为漏洞已修复。Runner 上 npm 10.9.9 执行 `npm audit fix --package-lock-only` 与 `npm update --package-lock-only` 均触发 npm 内部 `edgesOut` 错误，因此没有改写或伪称更新了 lockfile。CI 保留完整审计 JSON 报告；依赖升级需先修复工具链问题，再按主版本兼容性单独验证。
 
 ## 明确边界 / 需要后端或真实环境支持
 
