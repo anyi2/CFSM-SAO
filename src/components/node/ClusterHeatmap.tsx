@@ -351,7 +351,7 @@ export const ClusterHeatmap = memo(function ClusterHeatmap({
     }, 1600);
 
     return () => clearInterval(intervalTimer);
-  }, [mockFill, emptySlotsCount, bootPhase, generateMockSlot]);
+  }, [mockFill, emptySlotsCount, bootPhase, generateMockSlot, prefersReducedMotion]);
 
   // 根据单元格一维序号返回开屏动画样式类
   const getBootAnimationClass = (cellIndex: number): string => {

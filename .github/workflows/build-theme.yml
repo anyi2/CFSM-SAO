@@ -101,6 +101,14 @@ jobs:
         run: |
           node scripts/verify-build.mjs
 
+      - name: Package and verify preview ZIP
+        run: |
+          set -euo pipefail
+          node scripts/package-theme.mjs
+          archive="$(find . -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$archive"
+          unzip -t "$archive"
+
       - name: Install browser smoke tooling
         run: npm install --no-save --no-package-lock playwright@1.56.1
 
