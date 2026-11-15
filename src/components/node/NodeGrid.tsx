@@ -400,7 +400,11 @@ function HomeOverviewCards({
         </div>
 
         {/* 6 宫格指标卡片 */}
-        <div className="mao-stat-grid" data-visual-mode={overviewCardVisualMode || "adaptive"}>
+        <div
+          className="mao-stat-grid"
+          data-card-count={activeCardIds.length}
+          data-visual-mode={overviewCardVisualMode || "adaptive"}
+        >
           {activeCardIds.map((cardId) => renderCard(cardId))}
         </div>
       </div>

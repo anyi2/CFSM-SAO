@@ -17,7 +17,7 @@ import {
   useNodeStoreStatus,
   useRealtimeFocus,
 } from "@/hooks/useNode";
-import { makeNodeSlug } from "@/utils/nodeSlug";
+import { findNodesBySlug } from "@/utils/nodeSlug";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
 import { ANONYMOUS_MAX_HISTORY_HOURS } from "@/services/api";
 
@@ -57,8 +57,12 @@ function RangeSelector({
 export function Instance() {
   const { uuid, slug } = useParams<{ uuid: string; slug: string }>();
   const allNodes = useAllNodeMeta();
+  const slugMatches = slug ? findNodesBySlug(allNodes, slug) : [];
+  const isAmbiguousSlug = slugMatches.length > 1;
   const resolvedUuid = slug
-    ? allNodes.find((node) => makeNodeSlug(node.name || node.uuid) === slug)?.uuid
+    ? slugMatches.length === 1
+      ? slugMatches[0].uuid
+      : undefined
     : uuid;
   const { data: me } = useAuth();
   const themeSettings = useThemeSettings();
@@ -122,6 +126,41 @@ export function Instance() {
   }, [pingHours, pingRanges]);
 
   if (!uuid && !slug) return null;
+
+  if (isAmbiguousSlug) {
+    return (
+      <div className="flex flex-col gap-5 py-2">
+        <Link to="/" className="instance-page-back">
+          <ChevronLeft size={14} />
+          返回
+        </Link>
+        <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-center">
+          <div className="text-[15px] font-semibold text-(--text-primary)">
+            主机名重复，无法唯一定位实例
+          </div>
+          <p className="max-w-xl text-[13px] leading-relaxed text-(--text-secondary)">
+            多台服务器使用了相同主机名。为避免打开错误的机器，请从下方选择目标服务器；后续建议为它们设置不同的主机名。
+          </p>
+          <div className="flex w-full max-w-xl flex-col gap-2">
+            {slugMatches.map((node) => (
+              <Link
+                key={node.uuid}
+                to={`/server/${encodeURIComponent(node.uuid)}`}
+                className="flex items-center justify-between gap-3 rounded-xl border border-(--hairline) bg-(--bg-card) px-4 py-3 text-left transition-colors hover:border-(--accent-500)"
+              >
+                <span className="min-w-0 truncate text-[13px] font-medium text-(--text-primary)">
+                  {node.name || "未命名节点"}
+                </span>
+                <span className="shrink-0 font-mono text-[11px] text-(--text-tertiary)">
+                  UUID {node.uuid.slice(0, 8)}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!resolvedUuid || !meta) {
     const message = storeStatus.hydrated

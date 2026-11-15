@@ -296,13 +296,9 @@ export function normalizeOverviewCardVisualMode(
   return raw === "adaptive" || raw === "visual" || raw === "text" ? raw : fallback;
 }
 
-export const OVERVIEW_CARD_SLOT_COUNT = 6;
-
 export const DEFAULT_OVERVIEW_CARDS: readonly OverviewCardId[] = [
-  "asset",
-  "disk",
   "cpu",
-  "connections",
+  "disk",
   "bandwidth",
   "loss",
 ] as const;
@@ -322,7 +318,35 @@ export const ALL_OVERVIEW_CARD_IDS: readonly OverviewCardId[] = [
   "cores",
 ] as const;
 
+/**
+ * Preserve the user's selected set and order. Missing settings use the compact defaults;
+ * an explicit empty array intentionally means that no overview cards should be displayed.
+ */
 export function normalizeOverviewCards(raw: unknown): OverviewCardId[] {
+  const allIds = new Set<OverviewCardId>(ALL_OVERVIEW_CARD_IDS);
+  const source: unknown[] | null = Array.isArray(raw)
+    ? raw
+    : typeof raw === "object" &&
+        raw !== null &&
+        "overviewCards" in raw &&
+        Array.isArray((raw as { overviewCards: unknown }).overviewCards)
+      ? (raw as { overviewCards: unknown[] }).overviewCards
+      : null;
+
+  if (source === null) return [...DEFAULT_OVERVIEW_CARDS];
+
+  const result: OverviewCardId[] = [];
+  for (const item of source) {
+    if (
+      typeof item === "string" &&
+      allIds.has(item as OverviewCardId) &&
+      !result.includes(item as OverviewCardId)
+    ) {
+      result.push(item as OverviewCardId);
+    }
+  }
+  return result;
+}export function normalizeOverviewCards(raw: unknown): OverviewCardId[] {
   const allIds = new Set<OverviewCardId>(ALL_OVERVIEW_CARD_IDS);
   const result: OverviewCardId[] = [];
 
@@ -395,7 +419,7 @@ export interface ResolvedThemeSettings {
   pingLossColors: PingLossColors;
   trafficSpectrumColors: TrafficSpectrumColors;
   showHomeOverview: boolean;
-  /** 首页顶部总览左侧小卡片列表（固定 6 个槽位） */
+  /** 首页顶部总览左侧小卡片列表（用户自选数量与顺序） */
   overviewCards: OverviewCardId[];
   overviewCardVisualMode: OverviewCardVisualMode;
   /** 首页易闲置指标卡（平均CPU/今日流量/活跃连接）微图呈现模式：动态真实数据(dynamic)、静态美化微图(static) */

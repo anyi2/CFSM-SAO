@@ -21,12 +21,22 @@ import type { InstanceDetailModuleId, InstanceResourceCardId } from "@/types/cfs
 import "@/styles/instance-details-refined.css";
 
 const TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
+  year: "numeric",
   month: "2-digit",
   day: "2-digit",
   hour: "2-digit",
   minute: "2-digit",
   second: "2-digit",
 });
+
+function formatDataAge(timestamp: number, now = Date.now()): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return "";
+  const elapsed = Math.max(0, now - timestamp);
+  if (elapsed < 60_000) return "刚刚";
+  if (elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)} 分钟前`;
+  if (elapsed < 86_400_000) return `${Math.floor(elapsed / 3_600_000)} 小时前`;
+  return `${Math.floor(elapsed / 86_400_000)} 天前`;
+}
 
 function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value));
@@ -140,8 +150,9 @@ export function InstanceDetails({
     meta.traffic_limit,
   );
   const hasReportedMetrics = metrics.updatedAt > 0;
-  const lastUpdated =
-    hasReportedMetrics ? TIME_FORMATTER.format(metrics.updatedAt) : "尚无上报记录";
+  const lastUpdated = hasReportedMetrics
+    ? `${TIME_FORMATTER.format(metrics.updatedAt)} · ${formatDataAge(metrics.updatedAt)}`
+    : "尚无上报记录";
   const trimmedName = meta.name?.trim();
   const panelTitle = trimmedName ? trimmedName + " 信息" : "实例信息";
 

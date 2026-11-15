@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { normalizeThemeSettings } from "@/utils/themeSettings";
+import { normalizeOverviewCards, normalizeThemeSettings } from "@/utils/themeSettings";
 
 describe("normalizeThemeSettings", () => {
+  it("keeps overview cards variable-length and preserves explicit legacy selections", () => {
+    expect(normalizeOverviewCards(undefined)).toEqual(["cpu", "disk", "bandwidth", "loss"]);
+    expect(normalizeOverviewCards([])).toEqual([]);
+    expect(normalizeOverviewCards(["cpu", "bandwidth", "cpu", "unknown"])).toEqual([
+      "cpu",
+      "bandwidth",
+    ]);
+    expect(
+      normalizeOverviewCards(["asset", "disk", "cpu", "connections", "bandwidth", "loss"]),
+    ).toEqual(["asset", "disk", "cpu", "connections", "bandwidth", "loss"]);
+  });
+
   it("keeps mini and falls unknown saved view modes back to compact", () => {
     const settings = normalizeThemeSettings({
       desktopNodeViewMode: "retired-view",

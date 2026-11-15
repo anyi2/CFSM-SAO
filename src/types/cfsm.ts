@@ -62,6 +62,20 @@ export const DiskIoSchema = z
 
 export type DiskIo = z.output<typeof DiskIoSchema>;
 
+/** Historical disk telemetry keeps absent fields null instead of defaulting them to zero. */
+export const HistoryDiskIoSchema = z
+  .object({
+    read_bps: looseNumber.optional(),
+    write_bps: looseNumber.optional(),
+    read_iops: looseNumber.optional(),
+    write_iops: looseNumber.optional(),
+    await_ms: looseNumber.optional(),
+    util: looseNumber.optional(),
+  })
+  .passthrough();
+
+export type HistoryDiskIo = z.output<typeof HistoryDiskIoSchema>;
+
 export const GpuEntrySchema = z
   .object({
     id: looseString.default(""),
@@ -321,7 +335,7 @@ export const HistoryRowSchema = z
     swap_used: looseNumber.default(0),
     disk_total: looseNumber.default(0),
     disk_used: looseNumber.default(0),
-    disk: DiskIoSchema.optional(),
+    disk: HistoryDiskIoSchema.optional(),
     disk_read_bps: looseNumber.optional(),
     disk_write_bps: looseNumber.optional(),
     disk_read_iops: looseNumber.optional(),
@@ -676,6 +690,11 @@ export interface LoadRecord {
   /** 磁盘 IO 速率（字节/秒）。旧探针/旧后端不下发时为 null —— 0 表示真的没有读写。 */
   disk_read: number | null;
   disk_write: number | null;
+  /** Optional historical disk performance counters; null means the backend did not report them. */
+  disk_read_iops: number | null;
+  disk_write_iops: number | null;
+  disk_await_ms: number | null;
+  disk_util: number | null;
   net_in: number;
   net_out: number;
   /** CF-Server-Monitor 历史不保存累计流量，恒为 0。 */

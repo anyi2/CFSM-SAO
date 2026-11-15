@@ -606,6 +606,10 @@ export function historyRowToLoadRecord(row: HistoryRow, client: string): LoadRec
     // 优先嵌套的 disk 对象，兼容旧版平铺字段。
     disk_read: toNullableNumber(row.disk?.read_bps ?? row.disk_read_bps),
     disk_write: toNullableNumber(row.disk?.write_bps ?? row.disk_write_bps),
+    disk_read_iops: toNullableNumber(row.disk?.read_iops ?? row.disk_read_iops),
+    disk_write_iops: toNullableNumber(row.disk?.write_iops ?? row.disk_write_iops),
+    disk_await_ms: toNullableNumber(row.disk?.await_ms ?? row.disk_await_ms),
+    disk_util: toNullableNumber(row.disk?.util ?? row.disk_util),
     net_in: row.net_in_speed,
     net_out: row.net_out_speed,
     net_total_up: 0,

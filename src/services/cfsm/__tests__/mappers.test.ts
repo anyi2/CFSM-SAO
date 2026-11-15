@@ -335,28 +335,57 @@ describe("history conversion", () => {
     // 这一行没有磁盘 IO：保持 null，磁盘图才知道要退回已用空间。
     expect(record.disk_read).toBeNull();
     expect(record.disk_write).toBeNull();
+    expect([
+      record.disk_read_iops,
+      record.disk_write_iops,
+      record.disk_await_ms,
+      record.disk_util,
+    ]).toEqual([null, null, null, null]);
   });
 
   it("reads disk IO from either the nested object or the flat fields", () => {
     const nested = historyRowToLoadRecord(
       HistoryRowSchema.parse({
         timestamp: NOW,
-        disk: { read_bps: 4_000_000, write_bps: 1_500_000 },
+        disk: {
+          read_bps: 4_000_000,
+          write_bps: 1_500_000,
+          read_iops: 120,
+          write_iops: 42,
+          await_ms: 1.8,
+          util: 35.5,
+        },
       }),
       "node-a",
     );
     expect([nested.disk_read, nested.disk_write]).toEqual([4_000_000, 1_500_000]);
+    expect([
+      nested.disk_read_iops,
+      nested.disk_write_iops,
+      nested.disk_await_ms,
+      nested.disk_util,
+    ]).toEqual([120, 42, 1.8, 35.5]);
 
     const flat = historyRowToLoadRecord(
       HistoryRowSchema.parse({
         timestamp: NOW,
         disk_read_bps: 900_000,
         disk_write_bps: 0,
+        disk_read_iops: 18,
+        disk_write_iops: 0,
+        disk_await_ms: 0.7,
+        disk_util: 12,
       }),
       "node-a",
     );
     // 写入 0 是「真的没在写」，不能当作缺数据。
     expect([flat.disk_read, flat.disk_write]).toEqual([900_000, 0]);
+    expect([
+      flat.disk_read_iops,
+      flat.disk_write_iops,
+      flat.disk_await_ms,
+      flat.disk_util,
+    ]).toEqual([18, 0, 0.7, 12]);
   });
 
   it("emits one ping record per measured carrier", () => {

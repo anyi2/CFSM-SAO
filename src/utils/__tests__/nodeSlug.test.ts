@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makeNodeSlug } from "@/utils/nodeSlug";
+import { findNodesBySlug, makeNodeSlug } from "@/utils/nodeSlug";
 
 describe("makeNodeSlug", () => {
   it("preserves the configured host name", () => {
@@ -18,5 +18,26 @@ describe("makeNodeSlug", () => {
 
   it("returns an empty value for an empty host name", () => {
     expect(makeNodeSlug("   ")).toBe("");
+  });
+
+  it("resolves a hostname only when it matches one node", () => {
+    const nodes = [
+      { uuid: "node-a", name: "Tokyo" },
+      { uuid: "node-b", name: "London" },
+    ];
+    expect(findNodesBySlug(nodes, "Tokyo").map((node) => node.uuid)).toEqual(["node-a"]);
+  });
+
+  it("returns all duplicate hostname matches instead of selecting the first", () => {
+    const nodes = [
+      { uuid: "node-a", name: "Tokyo" },
+      { uuid: "node-b", name: "Tokyo " },
+      { uuid: "node-c", name: "London" },
+    ];
+    expect(findNodesBySlug(nodes, "Tokyo").map((node) => node.uuid)).toEqual(["node-a", "node-b"]);
+  });
+
+  it("uses UUIDs for nodes without a configured name", () => {
+    expect(findNodesBySlug([{ uuid: "node-a", name: "" }], "node-a")).toHaveLength(1);
   });
 });

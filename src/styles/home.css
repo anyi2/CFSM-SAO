@@ -4907,3 +4907,38 @@
   border-color: var(--accent-500, #f59e0b);
   background: color-mix(in srgb, var(--accent-500, #f59e0b) 14%, transparent);
 }
+
+/* Variable overview-card count: do not reserve empty grid slots for hidden cards. */
+.mao-stat-grid[data-card-count="1"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto;
+  align-content: start;
+  flex: initial;
+}
+
+.mao-stat-grid[data-card-count="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: auto;
+  align-content: start;
+  flex: initial;
+}
+
+.mao-stat-grid[data-card-count="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: auto;
+  align-content: start;
+  flex: initial;
+}
+
+.mao-stat-grid[data-card-count="4"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, auto));
+  align-content: start;
+  flex: initial;
+}
+
+@media (max-width: 768px) {
+  .mao-stat-grid[data-card-count="1"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
