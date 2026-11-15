@@ -21,6 +21,8 @@ import { findNodesBySlug } from "@/utils/nodeSlug";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
 import { ANONYMOUS_MAX_HISTORY_HOURS } from "@/services/api";
 import { useLoadRecords, usePingRecords } from "@/hooks/useRecords";
+import { useCarrierNames } from "@/hooks/usePublicConfig";
+import { carrierTaskName } from "@/services/cfsm/mappers";
 import { buildLoadRecordsCsv, buildPingRecordsCsv, downloadCsv } from "@/utils/csvExport";
 
 // 0.167（10 分钟）：官方规范铁律要求详情页默认 10 分钟历史曲线，大幅降低 D1 行读取。
@@ -68,6 +70,7 @@ export function Instance() {
     : uuid;
   const { data: me } = useAuth();
   const themeSettings = useThemeSettings();
+  const carrierNames = useCarrierNames();
   const meta = useNodeMeta(resolvedUuid ?? "");
   const storeStatus = useNodeStoreStatus(Boolean(uuid || slug));
   // 详情页和实时数据始终使用后端原始 UUID；URL 中的主机名只负责定位节点。
@@ -265,7 +268,10 @@ export function Instance() {
                   onClick={() => {
                     const data = pingRecordsQuery.data;
                     if (data?.records.length) {
-                      downloadCsv("cfsm-ping-" + exportBaseName + "-" + pingHours + "h.csv", buildPingRecordsCsv(data.records, data.tasks));
+                      downloadCsv("cfsm-ping-" + exportBaseName + "-" + pingHours + "h.csv", buildPingRecordsCsv(data.records, data.tasks.map((task) => ({
+                        ...task,
+                        name: carrierTaskName(task.id, carrierNames),
+                      }))));
                     }
                   }}
                   className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-(--hairline) px-3 py-2 text-[11px] font-medium text-(--text-secondary) disabled:cursor-not-allowed disabled:opacity-40"

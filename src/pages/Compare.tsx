@@ -4,7 +4,19 @@ import { ArrowLeft, Check, X } from "lucide-react";
 import { useVisibleNodes } from "@/hooks/useVisibleNodes";
 import { useNodeMetrics } from "@/hooks/useNode";
 import { formatBytes } from "@/utils/format";
+import { useCarrierNames } from "@/hooks/usePublicConfig";
 import type { NodeInfo } from "@/types/cfsm";
+
+const PING_FIELDS = [
+  ["ct", "lossCt"],
+  ["cu", "lossCu"],
+  ["cm", "lossCm"],
+  ["bd", "lossBd"],
+  ["node_1", "lossNode1"],
+  ["node_2", "lossNode2"],
+  ["node_3", "lossNode3"],
+  ["node_4", "lossNode4"],
+] as const;
 
 function numberText(value: number | null | undefined, suffix = ""): string {
   return typeof value === "number" && Number.isFinite(value) ? value.toFixed(1) + suffix : "—";
@@ -25,6 +37,7 @@ function MetricLine({ label, value }: { label: string; value: string }) {
 }
 function CompareCard({ node, onRemove }: { node: NodeInfo; onRemove: () => void }) {
   const metrics = useNodeMetrics(node.uuid);
+  const carrierNames = useCarrierNames();
   const hasSample = Boolean(metrics && metrics.updatedAt > 0);
   const online = metrics?.online;
   const onlineLabel = online === true ? "在线" : online === false ? "离线" : "状态未知";
@@ -51,7 +64,18 @@ function CompareCard({ node, onRemove }: { node: NodeInfo; onRemove: () => void 
       <MetricLine label="下行" value={hasSample ? byteText(metrics?.netDown, "/s") : "—"} />
       <MetricLine label="系统负载" value={hasSample && metrics?.loadAvailable ? [metrics.load1, metrics.load5, metrics.load15].map((v) => v.toFixed(2)).join(" / ") : "—"} />
       <MetricLine label="TCP / UDP" value={hasSample ? String(metrics?.connectionsTcp) + " / " + String(metrics?.connectionsUdp) : "—"} />
-      <MetricLine label="电信 Ping / 丢包" value={hasSample ? pingText(metrics?.ping.ct) + " / " + numberText(metrics?.ping.lossCt, "%") : "—"} />
+      {hasSample && PING_FIELDS.map(([key, lossKey]) => {
+        const latency = metrics?.ping[key];
+        const loss = metrics?.ping[lossKey];
+        if (latency == null && loss == null) return null;
+        return (
+          <MetricLine
+            key={key}
+            label={carrierNames[key] + " Ping / 丢包"}
+            value={pingText(latency) + " / " + numberText(loss, "%")}
+          />
+        );
+      })}
     </article>
   );
 }
