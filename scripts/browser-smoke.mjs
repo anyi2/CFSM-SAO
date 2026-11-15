@@ -40,20 +40,20 @@ try {
     await page.goto(detailUrl.toString(), { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(300);
 
-    const compareUrl = new URL(baseUrl);
-    compareUrl.hash = "/compare";
-    await page.goto(compareUrl.toString(), { waitUntil: "domcontentloaded" });
+    const retiredRouteUrl = new URL(baseUrl);
+    retiredRouteUrl.hash = "/compare";
+    await page.goto(retiredRouteUrl.toString(), { waitUntil: "domcontentloaded" });
     try {
-      await page.getByRole("heading", { name: "多节点性能对比" }).waitFor({ timeout: 5_000 });
+      await page.getByText("页面未找到", { exact: true }).waitFor({ timeout: 5_000 });
     } catch {
-      failures.push(`${viewport.name}: 多节点对比路由未正确挂载`);
+      failures.push(`${viewport.name}: 已移除的多节点对比路由未回退至 404`);
     }
 
     if (pageErrors.length) failures.push(`${viewport.name}: 页面运行异常：${pageErrors.join(" | ")}`);
     if (missingAssets.length) failures.push(`${viewport.name}: 静态资源加载失败：${missingAssets.join(", ")}`);
     const dimensions = await page.evaluate(() => ({ viewport: window.innerWidth, document: document.documentElement.scrollWidth }));
     if (dimensions.document > dimensions.viewport + 24) failures.push(`${viewport.name}: 页面存在明显横向溢出（${dimensions.document}px > ${dimensions.viewport}px）`);
-    console.log(`[browser-smoke] ${viewport.name}: root, detail and compare routes checked`);
+    console.log(`[browser-smoke] ${viewport.name}: root, detail and retired route checked`);
     await page.close();
   }
 } finally {
