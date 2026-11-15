@@ -283,9 +283,6 @@ export function ServerTab({
               value={draft.instanceDetailModuleOrder}
               onChange={(next) => patch("instanceDetailModuleOrder", next)}
             />
-            {!draft.showPingChart && (
-              <p className="setting-hint">Ping 图表当前已在全局设置中关闭，重新开启后会按这里的顺序显示。</p>
-            )}
           </div>
 
           <div className="surface-inset flex min-w-0 flex-col gap-3 px-4 py-4">
