@@ -72,8 +72,10 @@ function OrderEditor<T extends string>({
     const to = next.indexOf(targetId);
     if (from < 0 || to < 0) return;
     const [moved] = next.splice(from, 1);
-    if (!moved) return;
-    next.splice(to, 0, moved);
+    if (moved === undefined) return;
+    // Drop onto the target row: after removing an earlier row, the target index shifts left once.
+    const insertionIndex = from < to ? to - 1 : to;
+    next.splice(insertionIndex, 0, moved);
     onChange(next);
   };
 
