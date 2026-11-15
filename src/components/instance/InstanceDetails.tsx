@@ -158,7 +158,7 @@ export function InstanceDetails({
               {isOnline ? "在线运行" : "当前离线"}
             </span>
             <span className="instance-system-status-note">
-              {isOnline ? "系统信息实时同步" : "显示最近一次上报的信息"}
+              {isOnline ? "节点在线，监控数据持续更新" : "节点离线，显示最近一次上报的信息"}
             </span>
           </div>
           <div className="instance-system-overview">
@@ -179,7 +179,7 @@ export function InstanceDetails({
             <InfoRow label="显卡" value={meta.gpu_name || "未识别"} />
             <InfoRow label="Agent 版本" value={meta.agent_version || "未知"} />
             <InfoRow
-              label="网络协议"
+              label="IP 地址支持"
               value={[meta.ipv4 ? "IPv4" : "", meta.ipv6 ? "IPv6" : ""].filter(Boolean).join(" / ") || "未报告可用地址"}
             />
             <InfoRow
