@@ -217,6 +217,7 @@ export function InstanceDetails({
         {null}
       </InstancePanel>
       <div className="instance-info-groups instance-info-groups--refined instance-detail-module-layout">
+        {moduleOrder.includes("system") && (
         <section className="instance-info-group instance-system-group" aria-label="系统信息" style={{ order: moduleOrder.indexOf("system") }}>
           <div className="instance-info-group-title">系统</div>
           <div className="instance-system-status">
@@ -260,6 +261,8 @@ export function InstanceDetails({
           </div>
         </section>
 
+        )}
+        {moduleOrder.includes("resources") && (
         <section className="instance-info-group" aria-label="资源使用情况" style={{ order: moduleOrder.indexOf("resources") }}>
           <div className="instance-info-group-title">资源使用</div>
           <div className="instance-resource-grid">
@@ -287,7 +290,9 @@ export function InstanceDetails({
           />
         </section>
 
-        <section className="instance-info-group" aria-label="网络与流量" style={{ order: moduleOrder.indexOf("network") }}>
+        )}
+        {moduleOrder.includes("network") && (
+        <section className="instance-info-group instance-network-group" aria-label="网络与流量" style={{ order: moduleOrder.indexOf("network") }}>
           <div className="instance-info-group-title">
             网络{isOnline ? " · 实时" : " · 缓存"}
           </div>
@@ -366,7 +371,8 @@ export function InstanceDetails({
             </div>
           </div>
         </section>
-        {loadChart != null && (
+        )}
+        {moduleOrder.includes("loadChart") && loadChart != null && (
           <div
             ref={firstChartModule === "loadChart" ? chartControlsRef : undefined}
             className="instance-detail-chart-module"
@@ -375,7 +381,7 @@ export function InstanceDetails({
             {loadChart}
           </div>
         )}
-        {pingChart != null && (
+        {moduleOrder.includes("pingChart") && pingChart != null && (
           <div
             ref={firstChartModule === "pingChart" ? chartControlsRef : undefined}
             className="instance-detail-chart-module"
