@@ -146,36 +146,47 @@ export function InstanceDetails({
       }
     >
       <div className="instance-info-groups instance-info-groups--refined">
-        <section className="instance-info-group" aria-label="系统信息">
+        <section className="instance-info-group instance-system-group" aria-label="系统信息">
           <div className="instance-info-group-title">系统</div>
-          <InfoRow
-            label="状态"
-            value={
-              <span
-                className={
-                  "instance-status-pill" + (isOnline ? "" : " is-offline")
-                }
-              >
-                <span className="instance-status-dot" aria-hidden="true" />
-                {isOnline ? "在线" : "离线"}
-              </span>
-            }
-          />
-          <InfoRow
-            label="CPU 型号"
-            value={
-              (meta.cpu_name || "—") +
-              (meta.cpu_cores > 0 ? " (x" + meta.cpu_cores + ")" : "")
-            }
-          />
-          <InfoRow label="架构" value={meta.arch || "—"} />
-          <InfoRow label="区域 / 分组" value={[meta.region, meta.group].filter(Boolean).join(" · ") || "未设置"} />
-          <InfoRow label="显卡" value={meta.gpu_name || "—"} />
-          <InfoRow label="Agent 版本" value={meta.agent_version || "未知"} />
-          <InfoRow label="网络协议" value={[meta.ipv4 ? "IPv4" : "", meta.ipv6 ? "IPv6" : ""].filter(Boolean).join(" / ") || "未报告可用地址"} />
-          <InfoRow label="上报间隔" value={meta.report_interval > 0 ? meta.report_interval + " 秒" : "未提供"} />
-          <InfoRow label="操作系统" value={meta.os || "—"} />
-          <InfoRow label="内核版本" value={meta.kernel_version || "—"} />
+          <div className="instance-system-status">
+            <span
+              className={
+                "instance-status-pill" + (isOnline ? "" : " is-offline")
+              }
+            >
+              <span className="instance-status-dot" aria-hidden="true" />
+              {isOnline ? "在线运行" : "当前离线"}
+            </span>
+            <span className="instance-system-status-note">
+              {isOnline ? "系统信息实时同步" : "显示最近一次上报的信息"}
+            </span>
+          </div>
+          <div className="instance-system-overview">
+            <SystemFact label="操作系统" value={meta.os || "未知系统"} />
+            <SystemFact
+              label="处理器"
+              value={meta.cpu_name || "未识别"}
+              detail={meta.cpu_cores > 0 ? meta.cpu_cores + " 核心" : undefined}
+            />
+            <SystemFact label="系统架构" value={meta.arch || "未知架构"} />
+            <SystemFact label="内核版本" value={meta.kernel_version || "未知"} />
+          </div>
+          <div className="instance-system-meta">
+            <InfoRow
+              label="区域 / 分组"
+              value={[meta.region, meta.group].filter(Boolean).join(" · ") || "未设置"}
+            />
+            <InfoRow label="显卡" value={meta.gpu_name || "未识别"} />
+            <InfoRow label="Agent 版本" value={meta.agent_version || "未知"} />
+            <InfoRow
+              label="网络协议"
+              value={[meta.ipv4 ? "IPv4" : "", meta.ipv6 ? "IPv6" : ""].filter(Boolean).join(" / ") || "未报告可用地址"}
+            />
+            <InfoRow
+              label="上报间隔"
+              value={meta.report_interval > 0 ? meta.report_interval + " 秒" : "未提供"}
+            />
+          </div>
         </section>
 
         <section className="instance-info-group" aria-label="资源使用情况">
@@ -323,6 +334,25 @@ export function InstanceDetails({
         </section>
       </div>
     </InstancePanel>
+  );
+}
+
+
+function SystemFact({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail?: string;
+}) {
+  return (
+    <div className="instance-system-fact">
+      <span className="instance-system-fact-label">{label}</span>
+      <strong className="instance-system-fact-value">{value}</strong>
+      {detail && <span className="instance-system-fact-detail">{detail}</span>}
+    </div>
   );
 }
 
