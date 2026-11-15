@@ -1,4 +1,4 @@
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { lazy, memo, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -10,8 +10,6 @@ import {
 } from "lucide-react";
 import { Flag } from "@/components/ui/Flag";
 import { OverviewStatCard } from "./OverviewStatCard";
-import { DraggableCostBall } from "@/components/node/DraggableCostBall";
-import { ClusterHeatmap } from "./ClusterHeatmap";
 import { useAuth } from "@/hooks/useAuth";
 import { getLocalThemeSettings, saveLocalThemeSettings } from "@/services/themeSettingsStore";
 import {
@@ -49,8 +47,6 @@ import {
   getOverviewRating,
 } from "@/utils/overviewRating";
 import { VirtualNodeGrid } from "./VirtualNodeGrid";
-import { OverviewTrafficChart } from "./OverviewTrafficChart";
-import { NodeListView } from "./NodeListView";
 import {
   normalizeOverviewCards,
   type NodeViewMode,
@@ -60,7 +56,31 @@ import {
 } from "@/utils/themeSettings";
 import type { OverviewCardId, OverviewCardVisualMode, OverviewMicroVisualMode } from "@/types/cfsm";
 import { getRenewalReminders, type RenewalReminderSource } from "@/utils/renewalReminder";
+
 import { DiaTextReveal } from "@/components/ui/DiaTextReveal";
+
+// 首页只预载当前基础视图。矩阵热力图、列表视图和费用悬浮球属于可选分支，
+// 用户切换/启用时再加载，避免它们参与普通首页首屏 JS 的下载、解析与执行。
+const DraggableCostBall = lazy(() =>
+  import("@/components/node/DraggableCostBall").then((module) => ({
+    default: module.DraggableCostBall,
+  })),
+);
+const ClusterHeatmap = lazy(() =>
+  import("./ClusterHeatmap").then((module) => ({
+    default: module.ClusterHeatmap,
+  })),
+);
+const OverviewTrafficChart = lazy(() =>
+  import("./OverviewTrafficChart").then((module) => ({
+    default: module.OverviewTrafficChart,
+  })),
+);
+const NodeListView = lazy(() =>
+  import("./NodeListView").then((module) => ({
+    default: module.NodeListView,
+  })),
+);
 
 // 卡片视图网格密度；列表档由独立组件布局。
 const GRID_LAYOUT: Record<NodeViewMode, { className: string; minColumnWidth: number }> = {
@@ -513,28 +533,32 @@ function HomeOverviewCards({
               </div>
 
               {/* 进度模块 2：实时动态网络曲线图 */}
-              <OverviewTrafficChart
-                netUp={overview.netUp}
-                netDown={overview.netDown}
-              />
+              <Suspense fallback={<div className="min-h-[96px] w-full" aria-hidden="true" />}>
+                <OverviewTrafficChart
+                  netUp={overview.netUp}
+                  netDown={overview.netDown}
+                />
+              </Suspense>
             </>
           ) : (
             /* 矩阵布局：整屏呈现服务器机架方格热力矩阵 */
             <div className="mao-cluster-body-wrap">
               <div className="mao-cluster-pane">
-                <ClusterHeatmap
-                  nodes={visibleNodes}
-                  nameByUuid={nameByUuid}
-                  onlinePct={onlinePct}
-                  onlineNodes={overview.onlineNodes}
-                  offlineNodes={overview.offlineNodes}
-                  totalNodes={overview.totalNodes}
-                  colorTheme={matrixColorTheme}
-                  mockFill={matrixMockFill}
-                  bootAnimation={matrixBootAnimation}
-                  bootEffect={matrixBootEffect}
-                  customPattern={matrixCustomPattern}
-                />
+                <Suspense fallback={<div className="min-h-[320px] w-full" aria-hidden="true" />}>
+                  <ClusterHeatmap
+                    nodes={visibleNodes}
+                    nameByUuid={nameByUuid}
+                    onlinePct={onlinePct}
+                    onlineNodes={overview.onlineNodes}
+                    offlineNodes={overview.offlineNodes}
+                    totalNodes={overview.totalNodes}
+                    colorTheme={matrixColorTheme}
+                    mockFill={matrixMockFill}
+                    bootAnimation={matrixBootAnimation}
+                    bootEffect={matrixBootEffect}
+                    customPattern={matrixCustomPattern}
+                  />
+                </Suspense>
               </div>
             </div>
           )}
@@ -1266,7 +1290,11 @@ export function NodeGrid() {
   // 资产页悬浮入口 + 首页概览卡在「空节点」与正常两个分支里完全一致，提取一次复用。
   const homeHeader = (
     <>
-      {showCostFloatingButton && <DraggableCostBall />}
+      {showCostFloatingButton && (
+        <Suspense fallback={null}>
+          <DraggableCostBall />
+        </Suspense>
+      )}
       <HomeBrand siteName={siteName} />
       {showHomeOverview && (
         <HomeOverviewCards
@@ -1365,7 +1393,20 @@ export function NodeGrid() {
           />
         )}
         {isList ? (
-          cardsReady ? <NodeListView uuids={orderedUuids} /> : null
+          cardsReady ? (
+            <Suspense
+              fallback={
+                <div
+                  className="flex min-h-[240px] items-center justify-center text-(--text-tertiary)"
+                  role="status"
+                >
+                  正在加载列表视图…
+                </div>
+              }
+            >
+              <NodeListView uuids={orderedUuids} />
+            </Suspense>
+          ) : null
         ) : (
           gridElement
         )}
