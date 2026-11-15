@@ -2,12 +2,14 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSPr
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
+  ArrowLeftRight,
   Check,
   Pencil,
   Server,
   Sparkles,
   X,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Flag } from "@/components/ui/Flag";
 import { OverviewStatCard } from "./OverviewStatCard";
 import { DraggableCostBall } from "@/components/node/DraggableCostBall";
@@ -1348,11 +1350,13 @@ export function NodeGrid() {
                 <Server size={12} className="text-(--text-primary)" />
                 <span>服务器集群</span>
               </div>
-              {showHomeSort && (
-                <div className="mao-section-header-actions">
-                  <HomeSortControl state={sort} />
-                </div>
-              )}
+              <div className="mao-section-header-actions">
+                <Link to="/compare" className="inline-flex items-center gap-1.5 rounded-lg border border-(--hairline) bg-(--bg-card) px-3 py-2 text-[12px] font-medium text-(--text-secondary) transition-colors hover:text-(--text-primary)">
+                  <ArrowLeftRight size={14} />
+                  多节点对比
+                </Link>
+                {showHomeSort && <HomeSortControl state={sort} />}
+              </div>
             </div>
             <div className="mao-section-title-wrap">
               <h2 className="mao-section-title">服务器矩阵与实时监控</h2>
@@ -1362,8 +1366,14 @@ export function NodeGrid() {
             </div>
           </div>
         )}
-        {((!showHomeOverview && showHomeSort) || showGroupTabs) && (
+        {((!showHomeOverview && showHomeSort) || showGroupTabs || !showHomeOverview) && (
           <div className={controlsWrapClassName} style={controlsStyle}>
+            {!showHomeOverview && (
+              <Link to="/compare" className="inline-flex items-center gap-1.5 rounded-lg border border-(--hairline) bg-(--bg-card) px-3 py-2 text-[12px] font-medium text-(--text-secondary) transition-colors hover:text-(--text-primary)">
+                <ArrowLeftRight size={14} />
+                多节点对比
+              </Link>
+            )}
             {showGroupTabs && (
               <GroupTabs
                 groups={groupOptions}
