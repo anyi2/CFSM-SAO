@@ -14,6 +14,77 @@ import {
 // 普通 GET 没有传输超时，half-open socket 会无限挂住调用方，这里统一兜底。
 export const DEFAULT_API_TIMEOUT_MS = 12_000;
 
+/**
+ * Bound JSON parsing before Zod validation. Normal CFSM history payloads fit comfortably
+ * within this limit; compressed or chunked responses cannot bypass the streamed byte count.
+ */
+export const MAX_API_RESPONSE_BYTES = 64 * 1024 * 1024;
+const MAX_ERROR_RESPONSE_BYTES = 64 * 1024;
+
+export async function readJsonResponse(
+  response: Response,
+  path: string,
+  maxBytes = MAX_API_RESPONSE_BYTES,
+): Promise<unknown> {
+  const limit = Number.isFinite(maxBytes) && maxBytes > 0
+    ? Math.floor(maxBytes)
+    : MAX_API_RESPONSE_BYTES;
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > limit) {
+    throw new ApiRequestError(
+      `API response for ${path} exceeds the ${limit}-byte safety limit`,
+      413,
+      path,
+      413,
+    );
+  }
+
+  const body = response.body;
+  if (!body) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > limit) {
+      throw new ApiRequestError(
+        `API response for ${path} exceeds the ${limit}-byte safety limit`,
+        413,
+        path,
+        413,
+      );
+    }
+    return JSON.parse(text) as unknown;
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > limit) {
+        await reader.cancel();
+        throw new ApiRequestError(
+          `API response for ${path} exceeds the ${limit}-byte safety limit`,
+          413,
+          path,
+          413,
+        );
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+}
+
 export class ApiRequestError extends Error {
   constructor(
     message: string,
@@ -76,7 +147,9 @@ function buildHeaders(skipTurnstile = false): Record<string, string> {
 
 async function readErrorBody(resp: Response) {
   try {
-    const parsed = ErrorBodySchema.safeParse(await resp.json());
+    const parsed = ErrorBodySchema.safeParse(
+      await readJsonResponse(resp, "error response", MAX_ERROR_RESPONSE_BYTES),
+    );
     if (!parsed.success) return null;
     return parsed.data;
   } catch {
@@ -165,7 +238,7 @@ async function fetchAndParse<S extends z.ZodTypeAny>(
     );
   }
 
-  const json = (await resp.json()) as unknown;
+  const json = await readJsonResponse(resp, path);
   captureTurnstileVerified(json);
 
   const parsed = schema.safeParse(json);
@@ -282,7 +355,7 @@ export async function cfsmPost<S extends z.ZodTypeAny>(
     );
   }
 
-  const json = (await resp.json()) as unknown;
+  const json = await readJsonResponse(resp, path);
   captureTurnstileVerified(json);
 
   const parsed = schema.safeParse(json);
