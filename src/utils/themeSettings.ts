@@ -7,6 +7,8 @@ import type {
   TrafficSpectrumColors,
   UserMatrixPreset,
   OverviewCardId,
+  InstanceDetailModuleId,
+  InstanceResourceCardId,
 } from "@/types/cfsm";
 import {
   DEFAULT_COST_RATE_API_URL,
@@ -50,6 +52,79 @@ export type MatrixColorTheme =
   | "default"
   | "eva"
   | "divergence";
+
+export const DEFAULT_INSTANCE_DETAIL_MODULE_ORDER: readonly InstanceDetailModuleId[] = [
+  "system",
+  "resources",
+  "network",
+  "loadChart",
+  "pingChart",
+] as const;
+
+export const INSTANCE_DETAIL_MODULE_OPTIONS: readonly {
+  id: InstanceDetailModuleId;
+  label: string;
+  description: string;
+}[] = [
+  { id: "system", label: "系统信息", description: "操作系统、CPU、架构与节点资料" },
+  { id: "resources", label: "资源使用", description: "CPU、内存、Swap 与磁盘使用率" },
+  { id: "network", label: "网络与流量", description: "实时上下行速度、周期流量与配额" },
+  { id: "loadChart", label: "负载图表", description: "CPU、内存、磁盘 IO、网络与连接历史" },
+  { id: "pingChart", label: "Ping 图表", description: "线路延迟、丢包与历史采样" },
+] as const;
+
+export const DEFAULT_INSTANCE_RESOURCE_CARD_ORDER: readonly InstanceResourceCardId[] = [
+  "cpu",
+  "memory",
+  "swap",
+  "disk",
+] as const;
+
+export const INSTANCE_RESOURCE_CARD_OPTIONS: readonly {
+  id: InstanceResourceCardId;
+  label: string;
+}[] = [
+  { id: "cpu", label: "CPU" },
+  { id: "memory", label: "内存" },
+  { id: "swap", label: "Swap" },
+  { id: "disk", label: "磁盘" },
+] as const;
+
+function normalizeOrderedIds<T extends string>(
+  raw: unknown,
+  allowed: readonly T[],
+  defaults: readonly T[],
+): T[] {
+  const valid = new Set<string>(allowed);
+  const result: T[] = [];
+  if (Array.isArray(raw)) {
+    for (const value of raw) {
+      if (typeof value === "string" && valid.has(value) && !result.includes(value as T)) {
+        result.push(value as T);
+      }
+    }
+  }
+  for (const value of defaults) {
+    if (!result.includes(value)) result.push(value);
+  }
+  return result;
+}
+
+export function normalizeInstanceDetailModuleOrder(raw: unknown): InstanceDetailModuleId[] {
+  return normalizeOrderedIds(
+    raw,
+    DEFAULT_INSTANCE_DETAIL_MODULE_ORDER,
+    DEFAULT_INSTANCE_DETAIL_MODULE_ORDER,
+  );
+}
+
+export function normalizeInstanceResourceCardOrder(raw: unknown): InstanceResourceCardId[] {
+  return normalizeOrderedIds(
+    raw,
+    DEFAULT_INSTANCE_RESOURCE_CARD_ORDER,
+    DEFAULT_INSTANCE_RESOURCE_CARD_ORDER,
+  );
+}
 
 export const MATRIX_COLOR_THEMES: readonly MatrixColorTheme[] = [
   "default",
@@ -284,6 +359,8 @@ export interface ResolvedThemeSettings {
   desktopNodeViewMode: NodeViewMode;
   mobileNodeViewMode: NodeViewMode;
   serverCardTemplate: ServerCardTemplate;
+  instanceDetailModuleOrder: InstanceDetailModuleId[];
+  instanceResourceCardOrder: InstanceResourceCardId[];
   clusterOverviewMode: ClusterOverviewMode;
   matrixColorTheme: MatrixColorTheme;
   matrixMockFill: boolean;
@@ -352,6 +429,8 @@ export const DEFAULT_THEME_SETTINGS: ResolvedThemeSettings = {
   desktopNodeViewMode: "large",
   mobileNodeViewMode: "compact",
   serverCardTemplate: "layered",
+  instanceDetailModuleOrder: [...DEFAULT_INSTANCE_DETAIL_MODULE_ORDER],
+  instanceResourceCardOrder: [...DEFAULT_INSTANCE_RESOURCE_CARD_ORDER],
   clusterOverviewMode: "classic",
   matrixColorTheme: "eva",
   matrixMockFill: false,
@@ -681,6 +760,8 @@ export function normalizeThemeSettings(
       settings?.serverCardTemplate,
       DEFAULT_THEME_SETTINGS.serverCardTemplate,
     ),
+    instanceDetailModuleOrder: normalizeInstanceDetailModuleOrder(settings?.instanceDetailModuleOrder),
+    instanceResourceCardOrder: normalizeInstanceResourceCardOrder(settings?.instanceResourceCardOrder),
     clusterOverviewMode: normalizeClusterOverviewMode(settings?.clusterOverviewMode),
     matrixColorTheme: normalizeMatrixColorTheme(settings?.matrixColorTheme),
     matrixMockFill: normalizeMatrixMockFill(settings?.matrixMockFill),
