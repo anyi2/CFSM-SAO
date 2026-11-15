@@ -7,6 +7,8 @@ import {
   LayoutGrid,
   LayoutTemplate,
   GripVertical,
+  Eye,
+  EyeOff,
   RotateCcw,
   Rows3,
   Search,
@@ -39,7 +41,7 @@ import {
   PREVIEW_LOSS_BUCKETS,
 } from "../constants";
 import type { ThemeDraft } from "../types";
-import type { NodeInfo, PingTask, PingLatencyColors, PingLatencyThresholds, PingLossColors, PingLossThresholds, TrafficSpectrumColors } from "@/types/cfsm";
+import type { InstanceDetailModuleId, NodeInfo, PingTask, PingLatencyColors, PingLatencyThresholds, PingLossColors, PingLossThresholds, TrafficSpectrumColors } from "@/types/cfsm";
 
 const EMPTY_ASSIGNED_CLIENTS: string[] = [];
 
@@ -283,6 +285,69 @@ export function ServerTab({
               value={draft.instanceDetailModuleOrder}
               onChange={(next) => patch("instanceDetailModuleOrder", next)}
             />
+
+            <div className="mt-2 flex flex-col gap-2 border-t border-(--hairline) pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="setting-subhead-title">模块显示</div>
+                  <p className="setting-hint mt-1">按需隐藏不关心的区域；隐藏图表后不会加载对应历史数据。</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => patch("instanceDetailModuleHidden", [])}
+                  className="theme-manage-button is-compact flex shrink-0 items-center gap-1"
+                  title="显示全部详情页模块"
+                >
+                  <RotateCcw size={12} />
+                  全部显示
+                </button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {INSTANCE_DETAIL_MODULE_OPTIONS.map(({ id, label, description }) => {
+                  const hidden = draft.instanceDetailModuleHidden.includes(id);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      role="switch"
+                      aria-checked={!hidden}
+                      onClick={() => {
+                        const next = new Set<InstanceDetailModuleId>(draft.instanceDetailModuleHidden);
+                        if (hidden) next.delete(id);
+                        else next.add(id);
+                        patch(
+                          "instanceDetailModuleHidden",
+                          INSTANCE_DETAIL_MODULE_OPTIONS
+                            .map((option) => option.id)
+                            .filter((moduleId) => next.has(moduleId)),
+                        );
+                      }}
+                      className={clsx(
+                        "flex min-w-0 items-center gap-2.5 rounded-lg border border-(--hairline) px-3 py-2.5 text-left transition-colors",
+                        hidden
+                          ? "bg-(--bg-card) text-(--text-tertiary)"
+                          : "bg-[color-mix(in_srgb,var(--accent-500)_7%,var(--bg-card))] text-(--text-primary)",
+                      )}
+                    >
+                      {hidden ? (
+                        <EyeOff size={15} className="shrink-0" aria-hidden />
+                      ) : (
+                        <Eye size={15} className="shrink-0 text-(--accent-500)" aria-hidden />
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[12px] font-medium">{label}</span>
+                        <span className="mt-0.5 block text-[10px] leading-relaxed text-(--text-tertiary)">
+                          {description}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[10px] font-semibold">
+                        {hidden ? "已隐藏" : "显示中"}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           <div className="surface-inset flex min-w-0 flex-col gap-3 px-4 py-4">
