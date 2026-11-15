@@ -427,6 +427,10 @@ export interface NodeMetrics {
   load1: number;
   load5: number;
   load15: number;
+  /** 是否收到过可解析的系统负载样本；缺失不能伪装成 0。 */
+  loadAvailable?: boolean;
+  /** GPU 利用率是否由探针明确上报；型号存在不代表利用率可用。 */
+  gpuPctAvailable?: boolean;
   process: number;
   connectionsTcp: number;
   connectionsUdp: number;
