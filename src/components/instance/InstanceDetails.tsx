@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { Fragment, useEffect, type ReactNode, type RefObject } from "react";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -13,6 +13,11 @@ import { InstanceSwitcher } from "./InstanceSwitcher";
 import { formatBytes, formatUptimeDays } from "@/utils/format";
 import { resolveTrafficUsage, trafficTypeLabel } from "@/utils/traffic";
 import { InstancePanel } from "./InstancePanel";
+import {
+  DEFAULT_INSTANCE_DETAIL_MODULE_ORDER,
+  DEFAULT_INSTANCE_RESOURCE_CARD_ORDER,
+} from "@/utils/themeSettings";
+import type { InstanceDetailModuleId, InstanceResourceCardId } from "@/types/cfsm";
 import "@/styles/instance-details-refined.css";
 
 const TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
@@ -100,9 +105,19 @@ function NetworkSpeedCard({
 
 export function InstanceDetails({
   uuid,
+  moduleOrder = [...DEFAULT_INSTANCE_DETAIL_MODULE_ORDER],
+  resourceOrder = [...DEFAULT_INSTANCE_RESOURCE_CARD_ORDER],
+  loadChart,
+  pingChart,
+  chartControlsRef,
   onNodeReady,
 }: {
   uuid: string;
+  moduleOrder?: InstanceDetailModuleId[];
+  resourceOrder?: InstanceResourceCardId[];
+  loadChart?: ReactNode;
+  pingChart?: ReactNode;
+  chartControlsRef?: RefObject<HTMLDivElement | null>;
   onNodeReady?: () => (() => void) | void;
 }) {
   const meta = useNodeMeta(uuid);
@@ -136,17 +151,73 @@ export function InstanceDetails({
       ? (metrics.swapUsed / metrics.swapTotal) * 100
       : null;
   const diskPercent = metrics.diskTotal > 0 ? metrics.diskPct : null;
+  const firstChartModule = moduleOrder.find(
+    (id) => id === "loadChart" || (id === "pingChart" && pingChart != null),
+  );
+  const resourceCards: Record<InstanceResourceCardId, ReactNode> = {
+    cpu: (
+      <MetricCard
+        title="CPU"
+        icon={<Cpu size={15} />}
+        percent={hasReportedMetrics && Number.isFinite(metrics.cpuPct) ? metrics.cpuPct : null}
+        detail="处理器使用率"
+        tone="cpu"
+      />
+    ),
+    memory: (
+      <MetricCard
+        title="内存"
+        icon={<MemoryStick size={15} />}
+        percent={hasReportedMetrics ? ramPercent : null}
+        detail={
+          metrics.ramTotal > 0
+            ? formatBytes(metrics.ramUsed) + " / " + formatBytes(metrics.ramTotal)
+            : "容量数据暂不可用"
+        }
+        tone="memory"
+      />
+    ),
+    swap: (
+      <MetricCard
+        title="Swap"
+        icon={<Layers size={15} />}
+        percent={hasReportedMetrics ? swapPercent : null}
+        detail={
+          metrics.swapTotal > 0
+            ? formatBytes(metrics.swapUsed) + " / " + formatBytes(metrics.swapTotal)
+            : "未配置 Swap"
+        }
+        tone="swap"
+      />
+    ),
+    disk: (
+      <MetricCard
+        title="磁盘"
+        icon={<HardDrive size={15} />}
+        percent={hasReportedMetrics ? diskPercent : null}
+        detail={
+          metrics.diskTotal > 0
+            ? formatBytes(metrics.diskUsed) + " / " + formatBytes(metrics.diskTotal)
+            : "容量数据暂不可用"
+        }
+        tone="disk"
+      />
+    ),
+  };
 
   return (
-    <InstancePanel
-      title={panelTitle}
-      titleAction={<InstanceSwitcher currentUuid={uuid} />}
-      description={
-        isOnline ? undefined : "节点当前离线，以下展示最近一次上报的缓存数据。"
-      }
-    >
-      <div className="instance-info-groups instance-info-groups--refined">
-        <section className="instance-info-group instance-system-group" aria-label="系统信息">
+    <>
+      <InstancePanel
+        title={panelTitle}
+        titleAction={<InstanceSwitcher currentUuid={uuid} />}
+        description={
+          isOnline ? undefined : "节点当前离线，以下展示最近一次上报的缓存数据。"
+        }
+      >
+        {null}
+      </InstancePanel>
+      <div className="instance-info-groups instance-info-groups--refined instance-detail-module-layout">
+        <section className="instance-info-group instance-system-group" aria-label="系统信息" style={{ order: moduleOrder.indexOf("system") }}>
           <div className="instance-info-group-title">系统</div>
           <div className="instance-system-status">
             <span
@@ -189,49 +260,12 @@ export function InstanceDetails({
           </div>
         </section>
 
-        <section className="instance-info-group" aria-label="资源使用情况">
+        <section className="instance-info-group" aria-label="资源使用情况" style={{ order: moduleOrder.indexOf("resources") }}>
           <div className="instance-info-group-title">资源使用</div>
           <div className="instance-resource-grid">
-            <MetricCard
-              title="CPU"
-              icon={<Cpu size={15} />}
-              percent={hasReportedMetrics && Number.isFinite(metrics.cpuPct) ? metrics.cpuPct : null}
-              detail="处理器使用率"
-              tone="cpu"
-            />
-            <MetricCard
-              title="内存"
-              icon={<MemoryStick size={15} />}
-              percent={hasReportedMetrics ? ramPercent : null}
-              detail={
-                metrics.ramTotal > 0
-                  ? formatBytes(metrics.ramUsed) + " / " + formatBytes(metrics.ramTotal)
-                  : "容量数据暂不可用"
-              }
-              tone="memory"
-            />
-            <MetricCard
-              title="Swap"
-              icon={<Layers size={15} />}
-              percent={hasReportedMetrics ? swapPercent : null}
-              detail={
-                metrics.swapTotal > 0
-                  ? formatBytes(metrics.swapUsed) + " / " + formatBytes(metrics.swapTotal)
-                  : "未配置 Swap"
-              }
-              tone="swap"
-            />
-            <MetricCard
-              title="磁盘"
-              icon={<HardDrive size={15} />}
-              percent={hasReportedMetrics ? diskPercent : null}
-              detail={
-                metrics.diskTotal > 0
-                  ? formatBytes(metrics.diskUsed) + " / " + formatBytes(metrics.diskTotal)
-                  : "容量数据暂不可用"
-              }
-              tone="disk"
-            />
+            {resourceOrder.map((id) => (
+              <Fragment key={id}>{resourceCards[id]}</Fragment>
+            ))}
           </div>
           <InfoRow
             label="系统负载（1 / 5 / 15 分钟）"
@@ -253,7 +287,7 @@ export function InstanceDetails({
           />
         </section>
 
-        <section className="instance-info-group" aria-label="网络与流量">
+        <section className="instance-info-group" aria-label="网络与流量" style={{ order: moduleOrder.indexOf("network") }}>
           <div className="instance-info-group-title">
             网络{isOnline ? " · 实时" : " · 缓存"}
           </div>
@@ -332,8 +366,26 @@ export function InstanceDetails({
             </div>
           </div>
         </section>
+        {loadChart != null && (
+          <div
+            ref={firstChartModule === "loadChart" ? chartControlsRef : undefined}
+            className="instance-detail-chart-module"
+            style={{ order: moduleOrder.indexOf("loadChart") }}
+          >
+            {loadChart}
+          </div>
+        )}
+        {pingChart != null && (
+          <div
+            ref={firstChartModule === "pingChart" ? chartControlsRef : undefined}
+            className="instance-detail-chart-module"
+            style={{ order: moduleOrder.indexOf("pingChart") }}
+          >
+            {pingChart}
+          </div>
+        )}
       </div>
-    </InstancePanel>
+    </>
   );
 }
 
