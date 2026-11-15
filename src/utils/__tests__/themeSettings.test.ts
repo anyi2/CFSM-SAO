@@ -105,4 +105,29 @@ describe("normalizeThemeSettings", () => {
     expect(normalizeThemeSettings({ serverCardTemplate: "classic" }).serverCardTemplate).toBe("classic");
     expect(normalizeThemeSettings({ serverCardTemplate: "unknown" as never }).serverCardTemplate).toBe("layered");
   });
+
+  it("normalizes instance detail module and resource card order independently", () => {
+    const defaults = normalizeThemeSettings({});
+    expect(defaults.instanceDetailModuleOrder).toEqual([
+      "system",
+      "resources",
+      "network",
+      "loadChart",
+      "pingChart",
+    ]);
+    expect(defaults.instanceResourceCardOrder).toEqual(["cpu", "memory", "swap", "disk"]);
+
+    const customized = normalizeThemeSettings({
+      instanceDetailModuleOrder: ["network", "pingChart", "network", "unknown", "system"],
+      instanceResourceCardOrder: ["disk", "cpu", "cpu", "invalid"],
+    } as never);
+    expect(customized.instanceDetailModuleOrder).toEqual([
+      "network",
+      "pingChart",
+      "system",
+      "resources",
+      "loadChart",
+    ]);
+    expect(customized.instanceResourceCardOrder).toEqual(["disk", "cpu", "memory", "swap"]);
+  });
 });
