@@ -34,9 +34,16 @@ function verifyReference(reference, sourceFile) {
     /^[a-z][a-z0-9+.-]*:/i.test(value)
   ) return;
 
+  // Absolute root paths such as /favicon.ico belong to the CFSM host shell, not this theme ZIP.
+  // Root-relative /assets/* is still treated as a theme asset and must exist in dist.
   let target;
   try {
-    target = fileURLToPath(new URL(value, pathToFileURL(sourceFile)));
+    if (value.startsWith("/")) {
+      if (!value.startsWith("/assets/")) return;
+      target = resolve(dist, value.slice(1));
+    } else {
+      target = fileURLToPath(new URL(value, pathToFileURL(sourceFile)));
+    }
   } catch {
     fail(`无法解析资源引用：${value}（来源：${relative(dist, sourceFile)}）`);
     return;
