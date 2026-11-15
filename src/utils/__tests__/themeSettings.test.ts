@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { normalizeThemeSettings } from "@/utils/themeSettings";
+import { normalizeOverviewCards, normalizeThemeSettings } from "@/utils/themeSettings";
 
 describe("normalizeThemeSettings", () => {
+  it("keeps overview cards variable-length and preserves explicit legacy selections", () => {
+    expect(normalizeOverviewCards(undefined)).toEqual(["cpu", "disk", "bandwidth", "loss"]);
+    expect(normalizeOverviewCards([])).toEqual([]);
+    expect(normalizeOverviewCards(["cpu", "bandwidth", "cpu", "unknown"])).toEqual([
+      "cpu",
+      "bandwidth",
+    ]);
+    expect(
+      normalizeOverviewCards(["asset", "disk", "cpu", "connections", "bandwidth", "loss"]),
+    ).toEqual(["asset", "disk", "cpu", "connections", "bandwidth", "loss"]);
+  });
+
   it("keeps mini and falls unknown saved view modes back to compact", () => {
     const settings = normalizeThemeSettings({
       desktopNodeViewMode: "retired-view",
@@ -104,5 +116,39 @@ describe("normalizeThemeSettings", () => {
     expect(normalizeThemeSettings({ serverCardTemplate: "layered" }).serverCardTemplate).toBe("layered");
     expect(normalizeThemeSettings({ serverCardTemplate: "classic" }).serverCardTemplate).toBe("classic");
     expect(normalizeThemeSettings({ serverCardTemplate: "unknown" as never }).serverCardTemplate).toBe("layered");
+  });
+
+  it("normalizes instance detail module and resource card order independently", () => {
+    const defaults = normalizeThemeSettings({});
+    expect(defaults.instanceDetailModuleOrder).toEqual([
+      "system",
+      "resources",
+      "network",
+      "loadChart",
+      "pingChart",
+    ]);
+    expect(defaults.instanceResourceCardOrder).toEqual(["cpu", "memory", "swap", "disk"]);
+
+    const customized = normalizeThemeSettings({
+      instanceDetailModuleOrder: ["network", "pingChart", "network", "unknown", "system"],
+      instanceResourceCardOrder: ["disk", "cpu", "cpu", "invalid"],
+    } as never);
+    expect(customized.instanceDetailModuleOrder).toEqual([
+      "network",
+      "pingChart",
+      "system",
+      "resources",
+      "loadChart",
+    ]);
+    expect(customized.instanceResourceCardOrder).toEqual(["disk", "cpu", "memory", "swap"]);
+  });
+
+  it("defaults detail modules to visible and normalizes independent hidden modules", () => {
+    expect(normalizeThemeSettings({}).instanceDetailModuleHidden).toEqual([]);
+    expect(
+      normalizeThemeSettings({
+        instanceDetailModuleHidden: ["resources", "pingChart", "resources", "unknown"],
+      } as never).instanceDetailModuleHidden,
+    ).toEqual(["resources", "pingChart"]);
   });
 });

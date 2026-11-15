@@ -161,6 +161,9 @@ describe("toNodeInfo", () => {
 
     expect(info.uuid).toBe("node-a");
     expect(info.group).toBe("prod");
+    expect(info.region).toBe("JP");
+    expect(info.traffic_reset_day).toBe(5);
+    expect(info.report_interval).toBe(60);
     expect(info.weight).toBe(7);
     expect(info.hidden).toBe(true);
     expect(info.auto_renewal).toBe(false);
@@ -174,6 +177,14 @@ describe("toNodeInfo", () => {
     expect(toNodeInfo(server({ price: "0" })).price).toBe(0);
     expect(toNodeInfo(server({ price: "" })).price).toBeNull();
     expect(toNodeInfo(server({ price: "-3" })).price).toBeNull();
+  });
+
+  it("maps agent version and region metadata without inventing IP addresses", () => {
+    const info = toNodeInfo(server({ agent_version: "1.2.3", region: "Tokyo", ip_v4: "0", ip_v6: "1" }));
+    expect(info.agent_version).toBe("1.2.3");
+    expect(info.region).toBe("Tokyo");
+    expect(info.ipv4).toBe("");
+    expect(info.ipv6).toBe("1");
   });
 
   it("keeps IP reachability as a flag, since no address is exposed", () => {
@@ -193,9 +204,23 @@ describe("toNodeMetrics", () => {
     expect(metrics.diskPct).toBe(50);
     expect(metrics.load1).toBe(0.1);
     expect(metrics.load15).toBe(0.3);
+    expect(metrics.loadAvailable).toBe(true);
     expect(metrics.uptime).toBe(86_400);
     expect(metrics.netUp).toBe(1024);
     expect(metrics.netDown).toBe(2048);
+  });
+
+  it("does not treat missing load or GPU utilization as a real zero sample", () => {
+    const metrics = toNodeMetrics(server({ load_avg: "", gpu_info: [{ id: "0", name: "RTX", info: null }] }), NOW);
+    expect(metrics.loadAvailable).toBe(false);
+    expect(metrics.gpuPctAvailable).toBe(false);
+    expect(metrics.gpuPct).toBe(0);
+  });
+
+  it("accepts an explicitly reported GPU utilization of zero", () => {
+    const metrics = toNodeMetrics(server({ gpu_info: [{ id: "0", name: "RTX", info: 0 }] }), NOW);
+    expect(metrics.gpuPctAvailable).toBe(true);
+    expect(metrics.gpuPct).toBe(0);
   });
 
   it("keeps lifetime and monthly counters apart, aligning trafficUp to monthly cycle", () => {
@@ -310,28 +335,57 @@ describe("history conversion", () => {
     // 这一行没有磁盘 IO：保持 null，磁盘图才知道要退回已用空间。
     expect(record.disk_read).toBeNull();
     expect(record.disk_write).toBeNull();
+    expect([
+      record.disk_read_iops,
+      record.disk_write_iops,
+      record.disk_await_ms,
+      record.disk_util,
+    ]).toEqual([null, null, null, null]);
   });
 
   it("reads disk IO from either the nested object or the flat fields", () => {
     const nested = historyRowToLoadRecord(
       HistoryRowSchema.parse({
         timestamp: NOW,
-        disk: { read_bps: 4_000_000, write_bps: 1_500_000 },
+        disk: {
+          read_bps: 4_000_000,
+          write_bps: 1_500_000,
+          read_iops: 120,
+          write_iops: 42,
+          await_ms: 1.8,
+          util: 35.5,
+        },
       }),
       "node-a",
     );
     expect([nested.disk_read, nested.disk_write]).toEqual([4_000_000, 1_500_000]);
+    expect([
+      nested.disk_read_iops,
+      nested.disk_write_iops,
+      nested.disk_await_ms,
+      nested.disk_util,
+    ]).toEqual([120, 42, 1.8, 35.5]);
 
     const flat = historyRowToLoadRecord(
       HistoryRowSchema.parse({
         timestamp: NOW,
         disk_read_bps: 900_000,
         disk_write_bps: 0,
+        disk_read_iops: 18,
+        disk_write_iops: 0,
+        disk_await_ms: 0.7,
+        disk_util: 12,
       }),
       "node-a",
     );
     // 写入 0 是「真的没在写」，不能当作缺数据。
     expect([flat.disk_read, flat.disk_write]).toEqual([900_000, 0]);
+    expect([
+      flat.disk_read_iops,
+      flat.disk_write_iops,
+      flat.disk_await_ms,
+      flat.disk_util,
+    ]).toEqual([18, 0, 0.7, 12]);
   });
 
   it("emits one ping record per measured carrier", () => {

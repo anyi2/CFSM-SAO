@@ -133,6 +133,8 @@ function downsamplePoints(points: ChartPoint[], limit: number) {
 
 function formatRangeSummary(hours: number) {
   if (hours === 0) return "实时";
+  if (hours === 0.167) return "10 分钟";
+  if (hours === 0.5) return "30 分钟";
   if (hours % 24 === 0) return `${hours / 24} 天`;
   return `${hours} 小时`;
 }
@@ -529,6 +531,17 @@ export function LoadChart({
     }
     return null;
   }, [isRealtime, latestHistoryRecord, node?.diskIo]);
+  const latestDiskIoDetails = useMemo(() => {
+    const live = isRealtime ? node?.diskIo : null;
+    const history = latestHistoryRecord;
+    const details = {
+      readIops: live?.read_iops ?? history?.disk_read_iops ?? null,
+      writeIops: live?.write_iops ?? history?.disk_write_iops ?? null,
+      awaitMs: live?.await_ms ?? history?.disk_await_ms ?? null,
+      util: live?.util ?? history?.disk_util ?? null,
+    };
+    return Object.values(details).some((value) => value != null) ? details : null;
+  }, [isRealtime, latestHistoryRecord, node?.diskIo]);
   const hasDiskIo = useMemo(
     () => points.some((point) => point.diskRead != null || point.diskWrite != null),
     [points],
@@ -539,6 +552,23 @@ export function LoadChart({
       : latestHistoryRecord && latestHistoryTotals
         ? `${formatBytes(latestHistoryRecord.disk)} / ${formatBytes(latestHistoryTotals.diskTotal)}`
         : "—";
+  const diskIoDetailsLabel = latestDiskIoDetails
+    ? [
+        latestDiskIoDetails.readIops != null || latestDiskIoDetails.writeIops != null
+          ? `IOPS 读 ${Math.round(latestDiskIoDetails.readIops ?? 0)} / 写 ${Math.round(latestDiskIoDetails.writeIops ?? 0)}`
+          : null,
+        latestDiskIoDetails.awaitMs != null
+          ? `等待 ${latestDiskIoDetails.awaitMs.toFixed(2)} ms`
+          : null,
+        latestDiskIoDetails.util != null
+          ? `磁盘忙碌 ${latestDiskIoDetails.util.toFixed(1)}%`
+          : null,
+      ].filter(Boolean).join(" · ")
+    : null;
+  const diskIoNote = [
+    diskUsageLabel === "—" ? "已用空间 —" : `已用 ${diskUsageLabel}`,
+    diskIoDetailsLabel,
+  ].filter(Boolean).join(" · ");
   const sourceRecordCount = historyRecords.length;
   const wasDownsampled = !isRealtime && sourceRecordCount > getHistoryRenderLimit(hours);
   const sampleSummary = isRealtime
@@ -688,7 +718,7 @@ export function LoadChart({
                 ? `读 ${formatByteRateLabel(latestDiskIo.read)} · 写 ${formatByteRateLabel(latestDiskIo.write)}`
                 : "—"
             }
-            note={diskUsageLabel === "—" ? "已用空间 —" : `已用 ${diskUsageLabel}`}
+            note={diskIoNote}
             points={points}
             keys={DISK_IO_KEYS}
             colors={DISK_IO_COLORS}

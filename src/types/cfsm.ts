@@ -62,6 +62,20 @@ export const DiskIoSchema = z
 
 export type DiskIo = z.output<typeof DiskIoSchema>;
 
+/** Historical disk telemetry keeps absent fields null instead of defaulting them to zero. */
+export const HistoryDiskIoSchema = z
+  .object({
+    read_bps: looseNumber.optional(),
+    write_bps: looseNumber.optional(),
+    read_iops: looseNumber.optional(),
+    write_iops: looseNumber.optional(),
+    await_ms: looseNumber.optional(),
+    util: looseNumber.optional(),
+  })
+  .passthrough();
+
+export type HistoryDiskIo = z.output<typeof HistoryDiskIoSchema>;
+
 export const GpuEntrySchema = z
   .object({
     id: looseString.default(""),
@@ -321,7 +335,7 @@ export const HistoryRowSchema = z
     swap_used: looseNumber.default(0),
     disk_total: looseNumber.default(0),
     disk_used: looseNumber.default(0),
-    disk: DiskIoSchema.optional(),
+    disk: HistoryDiskIoSchema.optional(),
     disk_read_bps: looseNumber.optional(),
     disk_write_bps: looseNumber.optional(),
     disk_read_iops: looseNumber.optional(),
@@ -427,6 +441,10 @@ export interface NodeMetrics {
   load1: number;
   load5: number;
   load15: number;
+  /** 是否收到过可解析的系统负载样本；缺失不能伪装成 0。 */
+  loadAvailable?: boolean;
+  /** GPU 利用率是否由探针明确上报；型号存在不代表利用率可用。 */
+  gpuPctAvailable?: boolean;
   process: number;
   connectionsTcp: number;
   connectionsUdp: number;
@@ -568,6 +586,17 @@ export interface UserMatrixPreset {
 
 export type ServerCardTemplate = "classic" | "layered";
 
+/** 详情页可独立排序的一级模块。 */
+export type InstanceDetailModuleId =
+  | "system"
+  | "resources"
+  | "network"
+  | "loadChart"
+  | "pingChart";
+
+/** 详情页资源概览中的四张指标卡。 */
+export type InstanceResourceCardId = "cpu" | "memory" | "swap" | "disk";
+
 export interface ThemeSettings {
   [key: string]: unknown;
   carrierLossIncludedNodes?: string[];
@@ -575,6 +604,12 @@ export interface ThemeSettings {
   desktopNodeViewMode?: "large" | "compact" | "mini" | "list";
   mobileNodeViewMode?: "large" | "compact" | "mini" | "list";
   serverCardTemplate?: ServerCardTemplate;
+  /** 详情页一级模块显示顺序；缺项或旧配置自动补齐默认项。 */
+  instanceDetailModuleOrder?: InstanceDetailModuleId[];
+  /** 详情页资源概览中的指标卡顺序。 */
+  instanceResourceCardOrder?: InstanceResourceCardId[];
+  /** 详情页独立隐藏的模块；空数组表示全部显示。 */
+  instanceDetailModuleHidden?: InstanceDetailModuleId[];
   enableAdminButton?: boolean;
   showPingChart?: boolean;
   homepagePingBindings?: Record<string, string[]>;
@@ -655,6 +690,11 @@ export interface LoadRecord {
   /** 磁盘 IO 速率（字节/秒）。旧探针/旧后端不下发时为 null —— 0 表示真的没有读写。 */
   disk_read: number | null;
   disk_write: number | null;
+  /** Optional historical disk performance counters; null means the backend did not report them. */
+  disk_read_iops: number | null;
+  disk_write_iops: number | null;
+  disk_await_ms: number | null;
+  disk_util: number | null;
   net_in: number;
   net_out: number;
   /** CF-Server-Monitor 历史不保存累计流量，恒为 0。 */

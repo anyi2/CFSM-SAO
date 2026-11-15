@@ -8,6 +8,15 @@ const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("#root not found");
 const root = rootEl;
 
+// Remove local preferences belonging to retired theme-only features.
+// CFSM server-side alert settings remain managed by the CFSM backend.
+try {
+  window.localStorage.removeItem("cfsm-sao:home-filter-presets");
+  window.localStorage.removeItem("cfsm-sao:offline-notifications");
+} catch {
+  // Storage may be unavailable in restricted browser contexts.
+}
+
 async function bootstrap() {
   if (import.meta.env.DEV && typeof window !== "undefined") {
     const searchParams = new URLSearchParams(window.location.search);

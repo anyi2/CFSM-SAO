@@ -11,6 +11,7 @@ import {
 } from "@/utils/matrixPatterns";
 import type { MatrixColorTheme, MatrixBootEffect } from "@/utils/themeSettings";
 import type { HomeNodeSummary } from "@/services/wsStore";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 export const SAO_PIXEL_INDICES = DEFAULT_PATTERN_SET;
 
@@ -121,6 +122,7 @@ export const ClusterHeatmap = memo(function ClusterHeatmap({
 }: ClusterHeatmapProps) {
   const [hoverInfo, setHoverInfo] = useState<HoverState | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
 
   const litPixelSet = useMemo(() => {
     return getPatternPixelSet(customPattern);
@@ -128,14 +130,15 @@ export const ClusterHeatmap = memo(function ClusterHeatmap({
 
   // 开屏横扫/数字雨点阵动效状态机
   const [bootPhase, setBootPhase] = useState<"idle" | "scan" | "hold" | "dissolve">(() =>
-    bootAnimation ? "scan" : "idle",
+    bootAnimation && !prefersReducedMotion ? "scan" : "idle",
   );
   // scanStep: 当前扫描/动效演进阶段的 step
   const [scanStep, setScanStep] = useState<number>(-1);
 
   useEffect(() => {
-    if (!bootAnimation) {
+    if (!bootAnimation || prefersReducedMotion) {
       setBootPhase("idle");
+      setScanStep(-1);
       return;
     }
     // 页面载入时播放开屏动效：普通模式为从左向右横扫，黑客帝国模式为自上而下数据流雨滴下落
@@ -197,7 +200,7 @@ export const ClusterHeatmap = memo(function ClusterHeatmap({
       if (holdTimer) clearTimeout(holdTimer);
       if (dissolveTimer) clearTimeout(dissolveTimer);
     };
-  }, [bootAnimation, bootEffect]);
+  }, [bootAnimation, bootEffect, prefersReducedMotion]);
 
   // 统计高吞吐节点数量（速率 >= 5 MB/s）
   const highThroughputCount = useMemo(() => {
@@ -288,7 +291,7 @@ export const ClusterHeatmap = memo(function ClusterHeatmap({
 
   // 灵动呼吸时钟：页面载入后每隔 1.6s 随机挑选 8~16 个机位灵动流转，生动展现机房脉搏
   useEffect(() => {
-    if (!mockFill || emptySlotsCount <= 0 || bootPhase !== "idle") {
+    if (!mockFill || emptySlotsCount <= 0 || bootPhase !== "idle" || prefersReducedMotion) {
       return;
     }
 
@@ -348,7 +351,7 @@ export const ClusterHeatmap = memo(function ClusterHeatmap({
     }, 1600);
 
     return () => clearInterval(intervalTimer);
-  }, [mockFill, emptySlotsCount, bootPhase, generateMockSlot]);
+  }, [mockFill, emptySlotsCount, bootPhase, generateMockSlot, prefersReducedMotion]);
 
   // 根据单元格一维序号返回开屏动画样式类
   const getBootAnimationClass = (cellIndex: number): string => {

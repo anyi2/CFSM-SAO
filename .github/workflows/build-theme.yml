@@ -36,7 +36,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -84,6 +84,38 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Dependency security audit
+        shell: bash
+        run: |
+          set +e
+          npm audit --json > "$RUNNER_TEMP/npm-audit.json"
+          audit_status=$?
+          set -e
+          node - "$RUNNER_TEMP/npm-audit.json" <<'NODE'
+          const fs = require("node:fs");
+          const report = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+          const counts = report.metadata?.vulnerabilities ?? {};
+          console.log("Dependency audit:", JSON.stringify(counts));
+          for (const [name, issue] of Object.entries(report.vulnerabilities ?? {})) {
+            console.log([
+              name,
+              "severity=" + issue.severity,
+              "direct=" + issue.isDirect,
+              "range=" + issue.range,
+              "fixAvailable=" + JSON.stringify(issue.fixAvailable ?? false),
+            ].join(" "));
+          }
+          NODE
+          echo "npm audit exit code: $audit_status (report retained as workflow artifact)"
+
+      - name: Upload dependency audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-preview
+          path: ${{ runner.temp }}/npm-audit.json
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -99,14 +131,72 @@ jobs:
       # 主题目录只允许 index.html 和 assets/，构建配置若被改坏要在这里拦下来。
       - name: Verify build output
         run: |
-          test -f dist/index.html || { echo "缺少 dist/index.html"; exit 1; }
-          test -d dist/assets || { echo "缺少 dist/assets/"; exit 1; }
-          unexpected="$(find dist -mindepth 1 -maxdepth 1 ! -name index.html ! -name assets)"
-          if [ -n "$unexpected" ]; then
-            echo "产物里出现了不允许的顶层文件："
-            echo "$unexpected"
+          node scripts/verify-build.mjs
+
+      - name: Package and verify preview ZIP
+        run: |
+          set -euo pipefail
+          node scripts/package-theme.mjs
+          archive="$(find . -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$archive"
+          unzip -t "$archive"
+
+      - name: Upload preview ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cfsm-sao-preview-zip
+          path: "*.zip"
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Install browser smoke tooling
+        id: playwright
+        run: |
+          set -euo pipefail
+          bin="$(npx --yes --package=playwright@1.56.1 -c 'command -v playwright')"
+          test -n "$bin"
+          echo "bin=$bin" >> "$GITHUB_OUTPUT"
+          npx --yes --package=playwright@1.56.1 -- playwright install --with-deps chromium
+
+      - name: Browser smoke test
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 > /tmp/cfsm-sao-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            cat /tmp/cfsm-sao-preview.log
             exit 1
           fi
+          PLAYWRIGHT_BIN="${{ steps.playwright.outputs.bin }}" SMOKE_URL=http://127.0.0.1:4173/ node scripts/browser-smoke.mjs
+
+      - name: Large node performance smoke
+        run: |
+          set -euo pipefail
+          npm run dev -- --host 127.0.0.1 > /tmp/cfsm-sao-dev.log 2>&1 &
+          dev_pid=$!
+          trap 'kill "$dev_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5173/ >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            cat /tmp/cfsm-sao-dev.log
+            exit 1
+          fi
+          PLAYWRIGHT_BIN="${{ steps.playwright.outputs.bin }}" PERF_BASE_URL=http://127.0.0.1:5173/ node scripts/browser-perf-smoke.mjs
 
       # 产物分支必须保留历史：主题商店的 versions[].commitid 指向某次构建的 commit，
       # 用户也可能把主题地址锁在 40 位 SHA 上。一旦 force-push 覆盖，这些旧地址就会失效，

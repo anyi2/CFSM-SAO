@@ -21,6 +21,7 @@ import { usePreferences } from "@/hooks/usePreferences";
 import { useMetricColorsVersion } from "@/hooks/useMetricColors";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
 import { formatBytes } from "@/utils/format";
+import { makeNodeSlug } from "@/utils/nodeSlug";
 import {
   buildTrafficQuotaSegmentColors,
   speedRateColor,
@@ -303,7 +304,7 @@ function NodeCardHeader({
         <div className="server-card-title-row">
           <Flag region={node.region} size={15} />
           <Link
-            to={`/server/${encodeURIComponent(node.uuid)}`}
+            to={`/s/${encodeURIComponent(makeNodeSlug(node.name || node.uuid) || node.uuid)}`}
             className="server-card-title-link"
             title={node.name}
           >
@@ -323,7 +324,7 @@ function NodeCardHeader({
       </div>
       <div className="server-card-actions">
         <Link
-          to={`/server/${encodeURIComponent(node.uuid)}`}
+          to={`/s/${encodeURIComponent(makeNodeSlug(node.name || node.uuid) || node.uuid)}`}
           className="server-card-detail-link"
           title={detailLabels.title}
           aria-label={detailLabels.ariaLabel}

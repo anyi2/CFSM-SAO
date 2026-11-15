@@ -1,6 +1,6 @@
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Download } from "lucide-react";
 import "uplot/dist/uPlot.min.css";
 import { InstanceDetails } from "@/components/instance/InstanceDetails";
 import { PingChart } from "@/components/instance/PingChart";
@@ -11,9 +11,19 @@ import {
   buildPingTimeRangeOptions,
 } from "@/components/instance/chartShared";
 import { useAuth } from "@/hooks/useAuth";
-import { useNodeMeta, useNodeStoreStatus, useRealtimeFocus } from "@/hooks/useNode";
+import {
+  useAllNodeMeta,
+  useNodeMeta,
+  useNodeStoreStatus,
+  useRealtimeFocus,
+} from "@/hooks/useNode";
+import { findNodesBySlug } from "@/utils/nodeSlug";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
 import { ANONYMOUS_MAX_HISTORY_HOURS } from "@/services/api";
+import { useLoadRecords, usePingRecords } from "@/hooks/useRecords";
+import { useCarrierNames } from "@/hooks/usePublicConfig";
+import { carrierTaskName } from "@/services/cfsm/mappers";
+import { buildLoadRecordsCsv, buildPingRecordsCsv, downloadCsv } from "@/utils/csvExport";
 
 // 0.167（10 分钟）：官方规范铁律要求详情页默认 10 分钟历史曲线，大幅降低 D1 行读取。
 const DEFAULT_PING_HOURS = 0.167;
@@ -49,14 +59,22 @@ function RangeSelector({
 }
 
 export function Instance() {
-  const { uuid } = useParams<{ uuid: string }>();
+  const { uuid, slug } = useParams<{ uuid: string; slug: string }>();
+  const allNodes = useAllNodeMeta();
+  const slugMatches = slug ? findNodesBySlug(allNodes, slug) : [];
+  const isAmbiguousSlug = slugMatches.length > 1;
+  const resolvedUuid = slug
+    ? slugMatches.length === 1
+      ? slugMatches[0].uuid
+      : undefined
+    : uuid;
   const { data: me } = useAuth();
   const themeSettings = useThemeSettings();
-  const meta = useNodeMeta(uuid ?? "");
-  const storeStatus = useNodeStoreStatus(Boolean(uuid));
-  // 详情页只订阅这一台的实时推送（后端文档：详情页不要订阅全量再在前端过滤）。
-  useRealtimeFocus(uuid);
-  const [chartType, setChartType] = useState<"load" | "ping">("load");
+  const carrierNames = useCarrierNames();
+  const meta = useNodeMeta(resolvedUuid ?? "");
+  const storeStatus = useNodeStoreStatus(Boolean(uuid || slug));
+  // 详情页和实时数据始终使用后端原始 UUID；URL 中的主机名只负责定位节点。
+  useRealtimeFocus(resolvedUuid);
   const [loadHours, setLoadHours] = useState(DEFAULT_LOAD_HOURS);
   const [pingHours, setPingHours] = useState(DEFAULT_PING_HOURS);
   const chartControlsRef = useRef<HTMLDivElement | null>(null);
@@ -75,6 +93,26 @@ export function Instance() {
     [maxHistoryHours],
   );
   const showPingChart = themeSettings.isReady && themeSettings.showPingChart;
+  const visibleDetailModuleOrder = themeSettings.instanceDetailModuleOrder.filter(
+    (id) =>
+      !themeSettings.instanceDetailModuleHidden.includes(id) &&
+      (id !== "pingChart" || showPingChart),
+  );
+  // The charts and export buttons share the same React Query keys, avoiding duplicate history requests.
+  const loadRecordsQuery = useLoadRecords(
+    resolvedUuid ?? "",
+    loadHours,
+    Boolean(resolvedUuid) && visibleDetailModuleOrder.includes("loadChart"),
+  );
+  const pingRecordsQuery = usePingRecords(
+    resolvedUuid ?? "",
+    pingHours,
+    Boolean(resolvedUuid) && visibleDetailModuleOrder.includes("pingChart") && showPingChart,
+  );
+  const exportBaseName = (meta?.name?.trim() || resolvedUuid || "node")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "node";
 
   const alignCharts = useCallback(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -107,15 +145,44 @@ export function Instance() {
     }
   }, [pingHours, pingRanges]);
 
-  useEffect(() => {
-    if (!showPingChart && chartType === "ping") {
-      setChartType("load");
-    }
-  }, [chartType, showPingChart]);
+  if (!uuid && !slug) return null;
 
-  if (!uuid) return null;
+  if (isAmbiguousSlug) {
+    return (
+      <div className="flex flex-col gap-5 py-2">
+        <Link to="/" className="instance-page-back">
+          <ChevronLeft size={14} />
+          返回
+        </Link>
+        <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-center">
+          <div className="text-[15px] font-semibold text-(--text-primary)">
+            主机名重复，无法唯一定位实例
+          </div>
+          <p className="max-w-xl text-[13px] leading-relaxed text-(--text-secondary)">
+            多台服务器使用了相同主机名。为避免打开错误的机器，请从下方选择目标服务器；后续建议为它们设置不同的主机名。
+          </p>
+          <div className="flex w-full max-w-xl flex-col gap-2">
+            {slugMatches.map((node) => (
+              <Link
+                key={node.uuid}
+                to={`/server/${encodeURIComponent(node.uuid)}`}
+                className="flex items-center justify-between gap-3 rounded-xl border border-(--hairline) bg-(--bg-card) px-4 py-3 text-left transition-colors hover:border-(--accent-500)"
+              >
+                <span className="min-w-0 truncate text-[13px] font-medium text-(--text-primary)">
+                  {node.name || "未命名节点"}
+                </span>
+                <span className="shrink-0 font-mono text-[11px] text-(--text-tertiary)">
+                  UUID {node.uuid.slice(0, 8)}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-  if (!meta) {
+  if (!resolvedUuid || !meta) {
     const message = storeStatus.hydrated
       ? "找不到这个实例，它可能已被删除或链接无效。"
       : storeStatus.nodeInfoError
@@ -152,69 +219,72 @@ export function Instance() {
         <ChevronLeft size={14} />
         返回
       </Link>
-      <InstanceDetails uuid={uuid} onNodeReady={alignCharts} />
-      <div ref={chartControlsRef} className="instance-chart-controls">
-        <div className="instance-segmented">
-          <button
-            type="button"
-            data-active={chartType === "load" ? "true" : "false"}
-            aria-pressed={chartType === "load"}
-            onClick={() => {
-              startTransition(() => setChartType("load"));
-            }}
-          >
-            负载
-          </button>
-          {showPingChart && (
-            <button
-              type="button"
-              data-active={chartType === "ping" ? "true" : "false"}
-              aria-pressed={chartType === "ping"}
-              onClick={() => {
-                startTransition(() => setChartType("ping"));
-              }}
-            >
-              Ping
-            </button>
-          )}
-        </div>
-        {chartType === "load" && (
-          <RangeSelector
-            ranges={loadRanges}
-            value={loadHours}
-            onChange={(value) => startTransition(() => setLoadHours(value))}
-          />
-        )}
-        {chartType === "ping" && showPingChart && (
-          <RangeSelector
-            ranges={pingRanges}
-            value={pingHours}
-            onChange={(value) => startTransition(() => setPingHours(value))}
-          />
-        )}
-      </div>
-      <div className="instance-chart-stage">
-        <div
-          className="instance-chart-view"
-          hidden={chartType !== "load"}
-          aria-hidden={chartType !== "load"}
-        >
-          <LoadChart uuid={uuid} hours={loadHours} active={chartType === "load"} />
-        </div>
-        <div
-          className="instance-chart-view"
-          hidden={chartType !== "ping"}
-          aria-hidden={chartType !== "ping"}
-        >
-          {showPingChart ? (
-            <PingChart
-              uuid={uuid}
-              hours={pingHours}
-              active={chartType === "ping"}
-            />
-          ) : null}
-        </div>
-      </div>
+      <InstanceDetails
+        uuid={resolvedUuid}
+        moduleOrder={visibleDetailModuleOrder}
+        resourceOrder={themeSettings.instanceResourceCardOrder}
+        chartControlsRef={chartControlsRef}
+        onNodeReady={alignCharts}
+        loadChart={
+          visibleDetailModuleOrder.includes("loadChart") ? (
+          <>
+            <div className="instance-chart-controls flex flex-wrap items-center justify-between gap-2">
+              <RangeSelector
+                ranges={loadRanges}
+                value={loadHours}
+                onChange={setLoadHours}
+              />
+              <button
+                type="button"
+                disabled={!loadRecordsQuery.data?.records.length}
+                onClick={() => {
+                  const records = loadRecordsQuery.data?.records;
+                  if (records?.length) {
+                    downloadCsv("cfsm-load-" + exportBaseName + "-" + loadHours + "h.csv", buildLoadRecordsCsv(records));
+                  }
+                }}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-(--hairline) px-3 py-2 text-[11px] font-medium text-(--text-secondary) disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Download size={13} />
+                导出 CSV
+              </button>
+            </div>
+            <LoadChart uuid={resolvedUuid} hours={loadHours} active />
+          </>
+          ) : null
+        }
+        pingChart={
+          visibleDetailModuleOrder.includes("pingChart") && showPingChart ? (
+            <>
+              <div className="instance-chart-controls flex flex-wrap items-center justify-between gap-2">
+                <RangeSelector
+                  ranges={pingRanges}
+                  value={pingHours}
+                  onChange={setPingHours}
+                />
+                <button
+                  type="button"
+                  disabled={!pingRecordsQuery.data?.records.length}
+                  onClick={() => {
+                    const data = pingRecordsQuery.data;
+                    if (data?.records.length) {
+                      downloadCsv("cfsm-ping-" + exportBaseName + "-" + pingHours + "h.csv", buildPingRecordsCsv(data.records, data.tasks.map((task) => ({
+                        ...task,
+                        name: carrierTaskName(task.id, carrierNames),
+                      }))));
+                    }
+                  }}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-(--hairline) px-3 py-2 text-[11px] font-medium text-(--text-secondary) disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Download size={13} />
+                  导出 CSV
+                </button>
+              </div>
+              <PingChart uuid={resolvedUuid} hours={pingHours} active />
+            </>
+          ) : null
+        }
+      />
     </div>
   );
 }

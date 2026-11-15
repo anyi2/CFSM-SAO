@@ -4,7 +4,6 @@ import { OverviewStatCard, type OverviewData } from "@/components/node/OverviewS
 import {
   ALL_OVERVIEW_CARD_IDS,
   DEFAULT_OVERVIEW_CARDS,
-  OVERVIEW_CARD_SLOT_COUNT,
   OVERVIEW_CARD_VISUAL_MODES,
   normalizeOverviewCards,
 } from "@/utils/themeSettings";
@@ -99,9 +98,9 @@ export function OverviewCardPool<D extends OverviewCardPoolDraft>({
       if (
         indexA === indexB ||
         indexA < 0 ||
-        indexA >= OVERVIEW_CARD_SLOT_COUNT ||
+        indexA >= currentOverviewCards.length ||
         indexB < 0 ||
-        indexB >= OVERVIEW_CARD_SLOT_COUNT
+        indexB >= currentOverviewCards.length
       )
         return;
       const next = [...currentOverviewCards];
@@ -113,7 +112,7 @@ export function OverviewCardPool<D extends OverviewCardPoolDraft>({
 
   const replaceSlot = useCallback(
     (slotIndex: number, newCardId: OverviewCardId) => {
-      if (slotIndex < 0 || slotIndex >= OVERVIEW_CARD_SLOT_COUNT) return;
+      if (slotIndex < 0 || slotIndex >= currentOverviewCards.length) return;
       const oldCardId = currentOverviewCards[slotIndex];
       if (oldCardId === newCardId) return;
 
@@ -130,6 +129,34 @@ export function OverviewCardPool<D extends OverviewCardPoolDraft>({
       const next = [...currentOverviewCards];
       next[slotIndex] = newCardId;
       patch("overviewCards" as keyof D, normalizeOverviewCards(next) as D[keyof D]);
+      setSelectedSlotIndex(null);
+    },
+    [currentOverviewCards, patch],
+  );
+
+  const removeSlot = useCallback(
+    (slotIndex: number) => {
+      if (slotIndex < 0 || slotIndex >= currentOverviewCards.length) return;
+      const next = currentOverviewCards.filter((_, index) => index !== slotIndex);
+      patch("overviewCards" as keyof D, next as D[keyof D]);
+      setSelectedSlotIndex((selected) =>
+        selected === null || selected === slotIndex
+          ? null
+          : selected > slotIndex
+            ? selected - 1
+            : selected,
+      );
+    },
+    [currentOverviewCards, patch],
+  );
+
+  const addCard = useCallback(
+    (cardId: OverviewCardId) => {
+      if (currentOverviewCards.includes(cardId)) return;
+      patch(
+        "overviewCards" as keyof D,
+        [...currentOverviewCards, cardId] as D[keyof D],
+      );
       setSelectedSlotIndex(null);
     },
     [currentOverviewCards, patch],
@@ -185,18 +212,18 @@ export function OverviewCardPool<D extends OverviewCardPoolDraft>({
           <div className="text-xs font-semibold text-(--text-primary) flex items-center gap-1.5">
             <span>SAO 指标卡池模块</span>
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-(--hairline) bg-(--bg-card) text-(--accent-500)">
-              固定 6 槽位
+              已选 {currentOverviewCards.length} 张
             </span>
           </div>
           <p className="text-[11px] text-(--text-muted) mt-0.5">
-            显示在首页顶部的核心数据卡片。点击任意两张卡可对调顺序，也可以从下方备选池点击替换。
+            只展示你选中的指标，不需要凑满固定数量。可移除不常用卡片，也可从闲置卡池重新添加。
           </p>
         </div>
         <button
           type="button"
           className="theme-reset-pill-btn shrink-0 whitespace-nowrap"
           onClick={resetOverviewCards}
-          title="恢复官方默认 6 张卡片配置与排序"
+          title="恢复精简版默认 4 张卡片配置与排序"
         >
           <RotateCcw size={12} strokeWidth={2.2} />
           <span>重置</span>
@@ -235,7 +262,7 @@ export function OverviewCardPool<D extends OverviewCardPoolDraft>({
         </div>
       </div>
 
-      {/* 1. 首页 6 槽位虚线卡片网格 (3x2 布局，1:1 所见即所得) */}
+      {/* 1. 首页自选指标卡片网格 */}
       <div className="rounded-xl border border-dashed border-(--hairline) bg-[color-mix(in_srgb,var(--surface-elev)_75%,var(--bg-card))] p-1.5 sm:p-3.5 mb-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
           <div className="flex items-center gap-1.5">
@@ -244,12 +271,12 @@ export function OverviewCardPool<D extends OverviewCardPoolDraft>({
               展示卡池
             </span>
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-(--hairline) bg-(--bg-card) text-(--text-muted)">
-              6 槽展示中
+              {currentOverviewCards.length} 张展示中
             </span>
           </div>
           <span className="text-[10px] text-(--text-muted)">
-            <span className="theme-manage-guide-mouse">拖拽调序，点击对调或更换</span>
-            <span className="theme-manage-guide-touch">点两张卡对调，点闲置卡更换</span>
+            <span className="theme-manage-guide-mouse">拖拽调序；点卡片对调；× 移除；闲置卡添加</span>
+            <span className="theme-manage-guide-touch">点两张卡对调，点 × 移除；闲置卡添加</span>
           </span>
         </div>
 
@@ -283,9 +310,15 @@ export function OverviewCardPool<D extends OverviewCardPoolDraft>({
 
         <div
           className="grid grid-cols-2 md:grid-cols-3 gap-1.5 sm:gap-3 mao-stat-grid"
+          data-card-count={currentOverviewCards.length}
           data-visual-mode={draft.overviewCardVisualMode || "adaptive"}
           data-palette={draft.matrixColorTheme || "default"}
         >
+          {currentOverviewCards.length === 0 && (
+            <div className="col-span-full rounded-lg border border-dashed border-(--hairline) px-3 py-6 text-center text-[12px] text-(--text-tertiary)">
+              当前没有展示指标卡片，请从下方闲置卡池添加。
+            </div>
+          )}
           {currentOverviewCards.map((cardId, slotIndex) => {
             const isBeingDragged = draggingCard?.source === "slot" && draggingCard.slotIndex === slotIndex;
             const isDragOver = dragOverSlotIndex === slotIndex;
@@ -390,6 +423,18 @@ export function OverviewCardPool<D extends OverviewCardPoolDraft>({
                     </button>
                   )}
                   
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      removeSlot(slotIndex);
+                    }}
+                    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-(--hairline) bg-(--bg-card)/90 text-(--text-muted) shadow-xs transition-colors hover:border-red-400/60 hover:text-red-500"
+                    title={`从展示卡池移除${OVERVIEW_CARD_LABELS[cardId] || cardId}`}
+                    aria-label={`从展示卡池移除${OVERVIEW_CARD_LABELS[cardId] || cardId}`}
+                  >
+                    <X size={11} />
+                  </button>
                 </div>
 
                 {/* 所见即所得：真实指标卡实体，支持拖拽 */}
@@ -448,10 +493,10 @@ export function OverviewCardPool<D extends OverviewCardPoolDraft>({
             ) : (
               <>
                 <span className="theme-manage-guide-mouse">
-                  拖入上方或点击换入
+                  拖入上方、点击添加
                 </span>
                 <span className="theme-manage-guide-touch">
-                  点上方卡片后点此换入
+                  点击即可添加
                 </span>
               </>
             )}
@@ -500,6 +545,8 @@ export function OverviewCardPool<D extends OverviewCardPoolDraft>({
                 onClick={() => {
                   if (selectedSlotIndex !== null) {
                     replaceSlot(selectedSlotIndex, cardId);
+                  } else {
+                    addCard(cardId);
                   }
                 }}
                 className={`relative rounded-xl transition-all cursor-grab active:cursor-grabbing select-none theme-manage-stat-slot ${
@@ -511,8 +558,8 @@ export function OverviewCardPool<D extends OverviewCardPoolDraft>({
                 }`}
                 title={
                   selectedSlotIndex !== null
-                    ? `点击放入 #${selectedSlotIndex + 1} 槽位`
-                    : "按住拖拽至上方槽位进行替换"
+                    ? `点击放入 #${selectedSlotIndex + 1} 位置`
+                    : "点击添加到展示卡池，或拖拽至上方替换"
                 }
               >
                 {/* 闲置卡池：动静态微图切换 + 独立配置齿轮 */}

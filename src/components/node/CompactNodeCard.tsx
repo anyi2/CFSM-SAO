@@ -22,6 +22,7 @@ import { OsLogo } from "@/components/ui/OsLogo";
 import { useNodeCardModel } from "@/hooks/useNodeCardModel";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
 import { formatBytes } from "@/utils/format";
+import { makeNodeSlug } from "@/utils/nodeSlug";
 import { buildTrafficHeatSpectrum, speedRateColor, speedRateColorFromBytes } from "@/utils/metricTone";
 import { supportsFineHover } from "@/utils/mediaQuery";
 import { formatHealthBucketTooltip } from "./pingBucketText";
@@ -361,7 +362,7 @@ function CompactNodeHeader({
         <div className="compact-node-title-row">
           <Flag region={node.region} size={15} />
           <Link
-            to={`/server/${encodeURIComponent(node.uuid)}`}
+            to={`/s/${encodeURIComponent(makeNodeSlug(node.name || node.uuid) || node.uuid)}`}
             className="compact-node-title"
             title={node.name}
           >
@@ -371,7 +372,7 @@ function CompactNodeHeader({
       </div>
       <div className="compact-node-actions">
         <Link
-          to={`/server/${encodeURIComponent(node.uuid)}`}
+          to={`/s/${encodeURIComponent(makeNodeSlug(node.name || node.uuid) || node.uuid)}`}
           className="compact-node-detail-link"
           title={detailLabels.title}
           aria-label={detailLabels.ariaLabel}

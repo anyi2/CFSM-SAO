@@ -149,23 +149,48 @@ export function createWsConnection(
   }
 
   const MAX_RECONNECT_ATTEMPTS = 15;
+  /** 连续重试耗尽后进入冷却，再继续低频探测，不让临时网络故障永久关闭实时连接。 */
+  const RECONNECT_COOLDOWN_MS = 60_000;
 
   function scheduleReconnect() {
     if (closed || reconnectTimer != null) return;
-    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.warn(`[LuminaPlus] WebSocket 达到最大重连次数限制 (${MAX_RECONNECT_ATTEMPTS})，停止自动重连`);
-      setAvailable(false);
-      return;
+    const exhausted = reconnectAttempts >= MAX_RECONNECT_ATTEMPTS;
+    const delay = exhausted
+      ? RECONNECT_COOLDOWN_MS
+      : Math.min(
+          RECONNECT_MAX_DELAY_MS,
+          RECONNECT_BASE_DELAY_MS * 2 ** Math.min(reconnectAttempts, 5),
+        );
+    if (exhausted) {
+      reconnectAttempts = 0;
+    } else {
+      reconnectAttempts += 1;
     }
-    const delay = Math.min(
-      RECONNECT_MAX_DELAY_MS,
-      RECONNECT_BASE_DELAY_MS * 2 ** Math.min(reconnectAttempts, 5),
-    );
-    reconnectAttempts += 1;
     reconnectTimer = window.setTimeout(() => {
       reconnectTimer = null;
       connect();
     }, delay);
+  }
+
+  function handleVisibilityChange() {
+    if (
+      typeof document === "undefined" ||
+      document.visibilityState !== "visible" ||
+      closed ||
+      socket
+    ) {
+      return;
+    }
+    if (reconnectTimer != null) {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    reconnectAttempts = 0;
+    connect();
+  }
+
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", handleVisibilityChange);
   }
 
   function connect() {
@@ -217,6 +242,9 @@ export function createWsConnection(
         // 订阅参数被服务端拒绝，重连只会重复失败，交给轮询兜底。
         console.warn(`[LuminaPlus] WebSocket 订阅被拒绝 (1008)，已降级为轮询：${base}`);
         closed = true;
+        if (typeof document !== "undefined") {
+          document.removeEventListener("visibilitychange", handleVisibilityChange);
+        }
         return;
       }
       scheduleReconnect();
@@ -265,6 +293,9 @@ export function createWsConnection(
     close() {
       closed = true;
       clearTimers();
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
       const current = socket;
       socket = null;
       setAvailable(false);
