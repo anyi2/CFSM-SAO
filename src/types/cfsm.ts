@@ -572,6 +572,17 @@ export interface UserMatrixPreset {
 
 export type ServerCardTemplate = "classic" | "layered";
 
+/** 详情页可独立排序的一级模块。 */
+export type InstanceDetailModuleId =
+  | "system"
+  | "resources"
+  | "network"
+  | "loadChart"
+  | "pingChart";
+
+/** 详情页资源概览中的四张指标卡。 */
+export type InstanceResourceCardId = "cpu" | "memory" | "swap" | "disk";
+
 export interface ThemeSettings {
   [key: string]: unknown;
   carrierLossIncludedNodes?: string[];
@@ -579,6 +590,10 @@ export interface ThemeSettings {
   desktopNodeViewMode?: "large" | "compact" | "mini" | "list";
   mobileNodeViewMode?: "large" | "compact" | "mini" | "list";
   serverCardTemplate?: ServerCardTemplate;
+  /** 详情页一级模块显示顺序；缺项或旧配置自动补齐默认项。 */
+  instanceDetailModuleOrder?: InstanceDetailModuleId[];
+  /** 详情页资源概览中的指标卡顺序。 */
+  instanceResourceCardOrder?: InstanceResourceCardId[];
   enableAdminButton?: boolean;
   showPingChart?: boolean;
   homepagePingBindings?: Record<string, string[]>;
