@@ -178,6 +178,26 @@ jobs:
           fi
           PLAYWRIGHT_BIN="${{ steps.playwright.outputs.bin }}" SMOKE_URL=http://127.0.0.1:4173/ node scripts/browser-smoke.mjs
 
+      - name: Large node performance smoke
+        run: |
+          set -euo pipefail
+          npm run dev -- --host 127.0.0.1 > /tmp/cfsm-sao-dev.log 2>&1 &
+          dev_pid=$!
+          trap 'kill "$dev_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5173/ >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            cat /tmp/cfsm-sao-dev.log
+            exit 1
+          fi
+          PLAYWRIGHT_BIN="${{ steps.playwright.outputs.bin }}" PERF_BASE_URL=http://127.0.0.1:5173/ node scripts/browser-perf-smoke.mjs
+
       # 产物分支必须保留历史：主题商店的 versions[].commitid 指向某次构建的 commit，
       # 用户也可能把主题地址锁在 40 位 SHA 上。一旦 force-push 覆盖，这些旧地址就会失效，
       # 所以这里是在已有分支上追加提交，不重建、不强推。
