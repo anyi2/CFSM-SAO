@@ -453,7 +453,7 @@ export function toNodeMetrics(
     load1,
     load5,
     load15,
-    loadAvailable: server.load_avg.trim().length > 0 && server.load_avg.trim().split(/\s+/).length >= 3,
+    loadAvailable: (() => { const parts = server.load_avg.trim().split(/[\s,]+/); return parts.length >= 3 && parts.slice(0, 3).every((part) => part.length > 0 && Number.isFinite(Number(part))); })(),
     gpuPctAvailable: gpus.some((entry) => typeof entry.info === "number" && Number.isFinite(entry.info)),
     process: server.processes,
     connectionsTcp: server.tcp_conn,
