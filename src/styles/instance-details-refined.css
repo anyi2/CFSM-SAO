@@ -467,8 +467,8 @@
 }
 
 @media (max-width: 1100px) {
-  .instance-detail-module-layout > .instance-info-group:last-child {
-    grid-column: auto;
+  .instance-detail-module-layout > .instance-network-group {
+    grid-column: 1 / -1;
   }
 }
 
