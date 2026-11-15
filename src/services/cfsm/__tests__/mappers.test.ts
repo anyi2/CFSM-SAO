@@ -193,9 +193,23 @@ describe("toNodeMetrics", () => {
     expect(metrics.diskPct).toBe(50);
     expect(metrics.load1).toBe(0.1);
     expect(metrics.load15).toBe(0.3);
+    expect(metrics.loadAvailable).toBe(true);
     expect(metrics.uptime).toBe(86_400);
     expect(metrics.netUp).toBe(1024);
     expect(metrics.netDown).toBe(2048);
+  });
+
+  it("does not treat missing load or GPU utilization as a real zero sample", () => {
+    const metrics = toNodeMetrics(server({ load_avg: "", gpu_info: [{ id: "0", name: "RTX", info: null }] }), NOW);
+    expect(metrics.loadAvailable).toBe(false);
+    expect(metrics.gpuPctAvailable).toBe(false);
+    expect(metrics.gpuPct).toBe(0);
+  });
+
+  it("accepts an explicitly reported GPU utilization of zero", () => {
+    const metrics = toNodeMetrics(server({ gpu_info: [{ id: "0", name: "RTX", info: 0 }] }), NOW);
+    expect(metrics.gpuPctAvailable).toBe(true);
+    expect(metrics.gpuPct).toBe(0);
   });
 
   it("keeps lifetime and monthly counters apart, aligning trafficUp to monthly cycle", () => {
