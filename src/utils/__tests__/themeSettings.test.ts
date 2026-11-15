@@ -130,4 +130,13 @@ describe("normalizeThemeSettings", () => {
     ]);
     expect(customized.instanceResourceCardOrder).toEqual(["disk", "cpu", "memory", "swap"]);
   });
+
+  it("defaults detail modules to visible and normalizes independent hidden modules", () => {
+    expect(normalizeThemeSettings({}).instanceDetailModuleHidden).toEqual([]);
+    expect(
+      normalizeThemeSettings({
+        instanceDetailModuleHidden: ["resources", "pingChart", "resources", "unknown"],
+      } as never).instanceDetailModuleHidden,
+    ).toEqual(["resources", "pingChart"]);
+  });
 });
