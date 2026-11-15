@@ -13,9 +13,6 @@ const Instance = safeLazy(() =>
 const Assets = safeLazy(() =>
   loadAssetsPage().then((m) => ({ default: m.Assets })),
 );
-const Compare = safeLazy(() =>
-  import("@/pages/Compare").then((m) => ({ default: m.Compare })),
-);
 const NotFound = safeLazy(() =>
   import("@/pages/NotFound").then((m) => ({ default: m.NotFound })),
 );
@@ -65,10 +62,6 @@ export const router = createHashRouter([
       {
         path: "assets",
         element: suspended(<Assets />),
-      },
-      {
-        path: "compare",
-        element: suspended(<Compare />),
       },
       {
         path: "traffic",
