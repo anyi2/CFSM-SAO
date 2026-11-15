@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Lint
         run: npm run lint
 
@@ -36,6 +39,16 @@ jobs:
 
       - name: Build package
         run: npm run package
+
+      - name: Verify package archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$(find . -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$archive" || { echo "未生成 ZIP 安装包"; exit 1; }
+          unzip -t "$archive"
+          unzip -Z1 "$archive" | grep -qx 'index.html'
+          unzip -Z1 "$archive" | grep -q '^assets/'
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4

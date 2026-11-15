@@ -43,6 +43,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -193,6 +194,31 @@ describe("createWsConnection", () => {
 
     expect(FakeSocket.instances).toHaveLength(1);
     vi.advanceTimersByTime(1_000);
+    expect(FakeSocket.instances).toHaveLength(2);
+  });
+
+  it("keeps retrying at a low frequency after the exponential retry budget is exhausted", () => {
+    const { socket } = connect(["node-a"]);
+    for (let attempt = 0; attempt < 15; attempt += 1) {
+      socket().onclose?.({ code: 1006 });
+      vi.advanceTimersByTime(Math.min(30_000, 1_000 * 2 ** Math.min(attempt, 5)));
+    }
+
+    expect(FakeSocket.instances).toHaveLength(16);
+    socket().onclose?.({ code: 1006 });
+    vi.advanceTimersByTime(59_999);
+    expect(FakeSocket.instances).toHaveLength(16);
+    vi.advanceTimersByTime(1);
+    expect(FakeSocket.instances).toHaveLength(17);
+  });
+
+  it("reconnects immediately when the tab becomes visible during a retry delay", () => {
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+    const { socket } = connect(["node-a"]);
+    socket().onclose?.({ code: 1006 });
+
+    document.dispatchEvent(new Event("visibilitychange"));
+
     expect(FakeSocket.instances).toHaveLength(2);
   });
 

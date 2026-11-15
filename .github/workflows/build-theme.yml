@@ -99,14 +99,33 @@ jobs:
       # 主题目录只允许 index.html 和 assets/，构建配置若被改坏要在这里拦下来。
       - name: Verify build output
         run: |
-          test -f dist/index.html || { echo "缺少 dist/index.html"; exit 1; }
-          test -d dist/assets || { echo "缺少 dist/assets/"; exit 1; }
-          unexpected="$(find dist -mindepth 1 -maxdepth 1 ! -name index.html ! -name assets)"
-          if [ -n "$unexpected" ]; then
-            echo "产物里出现了不允许的顶层文件："
-            echo "$unexpected"
+          node scripts/verify-build.mjs
+
+      - name: Install browser smoke tooling
+        run: npm install --no-save --no-package-lock playwright@1.56.1
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser smoke test
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 > /tmp/cfsm-sao-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            cat /tmp/cfsm-sao-preview.log
             exit 1
           fi
+          SMOKE_URL=http://127.0.0.1:4173/ node scripts/browser-smoke.mjs
 
       # 产物分支必须保留历史：主题商店的 versions[].commitid 指向某次构建的 commit，
       # 用户也可能把主题地址锁在 40 位 SHA 上。一旦 force-push 覆盖，这些旧地址就会失效，
