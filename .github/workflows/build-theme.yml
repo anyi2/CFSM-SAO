@@ -110,10 +110,13 @@ jobs:
           unzip -t "$archive"
 
       - name: Install browser smoke tooling
-        run: npm install --no-save --no-package-lock playwright@1.56.1
-
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        id: playwright
+        run: |
+          set -euo pipefail
+          bin="$(npx --yes --package=playwright@1.56.1 -c 'command -v playwright')"
+          test -n "$bin"
+          echo "bin=$bin" >> "$GITHUB_OUTPUT"
+          npx --yes --package=playwright@1.56.1 -- playwright install --with-deps chromium
 
       - name: Browser smoke test
         run: |
@@ -133,7 +136,7 @@ jobs:
             cat /tmp/cfsm-sao-preview.log
             exit 1
           fi
-          SMOKE_URL=http://127.0.0.1:4173/ node scripts/browser-smoke.mjs
+          PLAYWRIGHT_BIN="${{ steps.playwright.outputs.bin }}" SMOKE_URL=http://127.0.0.1:4173/ node scripts/browser-smoke.mjs
 
       # 产物分支必须保留历史：主题商店的 versions[].commitid 指向某次构建的 commit，
       # 用户也可能把主题地址锁在 40 位 SHA 上。一旦 force-push 覆盖，这些旧地址就会失效，
