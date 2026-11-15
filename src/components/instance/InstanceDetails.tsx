@@ -15,7 +15,6 @@ import { resolveTrafficUsage, trafficTypeLabel } from "@/utils/traffic";
 import { InstancePanel } from "./InstancePanel";
 import "@/styles/instance-details-refined.css";
 
-// Intl.DateTimeFormat 构造开销大，复用一个实例，避免每次 metrics 更新都重建。
 const TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
   hour: "2-digit",
   minute: "2-digit",
@@ -43,7 +42,7 @@ function MetricCard({
     percent != null && Number.isFinite(percent) ? clampPercent(percent) : null;
 
   return (
-    <div className={\`instance-metric-card is-\${tone}\`}>
+    <div className={"instance-metric-card is-" + tone}>
       <div className="instance-metric-head">
         <span>{title}</span>
         <span className="instance-metric-icon" aria-hidden="true">
@@ -51,21 +50,21 @@ function MetricCard({
         </span>
       </div>
       <div className="instance-metric-value">
-        {safePercent == null ? "—" : \`\${safePercent.toFixed(1)}%\`}
+        {safePercent == null ? "—" : safePercent.toFixed(1) + "%"}
       </div>
       <div className="instance-metric-detail">{detail}</div>
       {safePercent != null && (
         <div
           className="instance-metric-track"
           role="progressbar"
-          aria-label={\`\${title}使用率\`}
+          aria-label={title + "使用率"}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={safePercent}
         >
           <span
             className="instance-metric-fill"
-            style={{ width: \`\${safePercent}%\` }}
+            style={{ width: safePercent + "%" }}
           />
         </div>
       )}
@@ -84,7 +83,7 @@ function NetworkSpeedCard({
 
   return (
     <div className="instance-network-speed">
-      <div className={\`instance-network-speed-head is-\${direction}\`}>
+      <div className={"instance-network-speed-head is-" + direction}>
         {isUp ? (
           <ArrowUpFromLine size={14} aria-hidden="true" />
         ) : (
@@ -126,7 +125,7 @@ export function InstanceDetails({
   const lastUpdated =
     metrics.updatedAt > 0 ? TIME_FORMATTER.format(metrics.updatedAt) : "—";
   const trimmedName = meta.name?.trim();
-  const panelTitle = trimmedName ? \`\${trimmedName} 信息\` : "实例信息";
+  const panelTitle = trimmedName ? trimmedName + " 信息" : "实例信息";
 
   const ramPercent = metrics.ramTotal > 0 ? metrics.ramPct : null;
   const swapPercent =
@@ -150,7 +149,9 @@ export function InstanceDetails({
             label="状态"
             value={
               <span
-                className={\`instance-status-pill\${isOnline ? "" : " is-offline"}\`}
+                className={
+                  "instance-status-pill" + (isOnline ? "" : " is-offline")
+                }
               >
                 <span className="instance-status-dot" aria-hidden="true" />
                 {isOnline ? "在线" : "离线"}
@@ -159,7 +160,10 @@ export function InstanceDetails({
           />
           <InfoRow
             label="CPU 型号"
-            value={\`\${meta.cpu_name || "—"}\${meta.cpu_cores > 0 ? \` (x\${meta.cpu_cores})\` : ""}\`}
+            value={
+              (meta.cpu_name || "—") +
+              (meta.cpu_cores > 0 ? " (x" + meta.cpu_cores + ")" : "")
+            }
           />
           <InfoRow label="架构" value={meta.arch || "—"} />
           <InfoRow label="显卡" value={meta.gpu_name || "—"} />
@@ -183,7 +187,7 @@ export function InstanceDetails({
               percent={ramPercent}
               detail={
                 metrics.ramTotal > 0
-                  ? \`\${formatBytes(metrics.ramUsed)} / \${formatBytes(metrics.ramTotal)}\`
+                  ? formatBytes(metrics.ramUsed) + " / " + formatBytes(metrics.ramTotal)
                   : "容量数据暂不可用"
               }
               tone="memory"
@@ -194,7 +198,7 @@ export function InstanceDetails({
               percent={swapPercent}
               detail={
                 metrics.swapTotal > 0
-                  ? \`\${formatBytes(metrics.swapUsed)} / \${formatBytes(metrics.swapTotal)}\`
+                  ? formatBytes(metrics.swapUsed) + " / " + formatBytes(metrics.swapTotal)
                   : "未配置 Swap"
               }
               tone="swap"
@@ -205,7 +209,7 @@ export function InstanceDetails({
               percent={diskPercent}
               detail={
                 metrics.diskTotal > 0
-                  ? \`\${formatBytes(metrics.diskUsed)} / \${formatBytes(metrics.diskTotal)}\`
+                  ? formatBytes(metrics.diskUsed) + " / " + formatBytes(metrics.diskTotal)
                   : "容量数据暂不可用"
               }
               tone="disk"
@@ -213,11 +217,17 @@ export function InstanceDetails({
           </div>
           <InfoRow
             label="系统负载"
-            value={\`\${metrics.load1.toFixed(2)} · \${metrics.load5.toFixed(2)} · \${metrics.load15.toFixed(2)}\`}
+            value={
+              metrics.load1.toFixed(2) +
+              " · " +
+              metrics.load5.toFixed(2) +
+              " · " +
+              metrics.load15.toFixed(2)
+            }
           />
           <InfoRow
             label="运行时长"
-            value={uptime.unit ? \`\${uptime.value} \${uptime.unit}\` : uptime.value}
+            value={uptime.unit ? uptime.value + " " + uptime.unit : uptime.value}
           />
         </section>
 
@@ -228,11 +238,11 @@ export function InstanceDetails({
           <div className="instance-network-speeds">
             <NetworkSpeedCard
               direction="up"
-              value={\`\${formatBytes(metrics.netUp)}/s\`}
+              value={formatBytes(metrics.netUp) + "/s"}
             />
             <NetworkSpeedCard
               direction="down"
-              value={\`\${formatBytes(metrics.netDown)}/s\`}
+              value={formatBytes(metrics.netDown) + "/s"}
             />
           </div>
           <InfoRow
@@ -278,13 +288,12 @@ export function InstanceDetails({
                   >
                     <span
                       className="instance-progress-fill"
-                      style={{ width: \`\${trafficUsage.fraction * 100}%\` }}
+                      style={{ width: trafficUsage.fraction * 100 + "%" }}
                     />
                   </div>
                   <div className="instance-traffic-quota-meta">
                     <strong>
-                      {formatBytes(trafficUsage.used)} /{" "}
-                      {formatBytes(meta.traffic_limit)}
+                      {formatBytes(trafficUsage.used)} / {formatBytes(meta.traffic_limit)}
                     </strong>
                     <span>剩余 {formatBytes(trafficUsage.remaining)}</span>
                   </div>
