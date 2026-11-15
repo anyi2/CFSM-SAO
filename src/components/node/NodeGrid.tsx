@@ -51,9 +51,7 @@ import { HomeSortControl } from "./HomeSortControl";
 import {
   getOverviewRating,
 } from "@/utils/overviewRating";
-import { CompactNodeCard } from "./CompactNodeCard";
-import { MiniNodeCard } from "./MiniNodeCard";
-import { NodeCard } from "./NodeCard";
+import { VirtualNodeGrid } from "./VirtualNodeGrid";
 import { OverviewTrafficChart } from "./OverviewTrafficChart";
 import { NodeListView } from "./NodeListView";
 import {
@@ -1327,7 +1325,7 @@ export function NodeGrid() {
     }
   }, [themeSettings.showGroupTabs, selectedGroup]);
 
-  // 卡片列表只随 UUID 集合/顺序变化；卡片内部各自订阅实时数据。
+  // 只维护 UUID 顺序；大集群由 VirtualNodeGrid 按视口挂载卡片，避免一次创建上千个组件与订阅。
   const uuidsKey = useMemo(
     () => orderedNodes.map((node) => node.uuid).join(UUID_KEY_SEPARATOR),
     [orderedNodes],
@@ -1335,24 +1333,6 @@ export function NodeGrid() {
   const orderedUuids = useMemo(
     () => (uuidsKey ? uuidsKey.split(UUID_KEY_SEPARATOR) : []),
     [uuidsKey],
-  );
-  // 列表档由下方 NodeListView 渲染,这里不必构造卡片元素。
-  const cards = useMemo(
-    () =>
-      mode === "list"
-        ? null
-        : orderedUuids.map((uuid) => (
-          <div key={uuid} className="min-w-0">
-            {mode === "mini" ? (
-              <MiniNodeCard uuid={uuid} />
-            ) : mode === "compact" ? (
-              <CompactNodeCard uuid={uuid} />
-            ) : (
-              <NodeCard uuid={uuid} />
-            )}
-          </div>
-        )),
-    [orderedUuids, mode],
   );
   const showGroupTabs =
     themeSettings.isReady && themeSettings.showGroupTabs && groupOptions.length > 0;
@@ -1371,9 +1351,14 @@ export function NodeGrid() {
       ? ({ "--mini-card-min-width": `${minColumnWidth}px` } as MiniGridStyle)
       : { gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${minColumnWidth}px), 1fr))` };
   const gridElement = (
-    <div className={gridWrapClassName} style={gridStyle}>
-      {cardsReady ? cards : null}
-    </div>
+    <VirtualNodeGrid
+      uuids={orderedUuids}
+      mode={mode as Exclude<NodeViewMode, "list">}
+      minColumnWidth={minColumnWidth}
+      className={gridWrapClassName}
+      gridStyle={gridStyle}
+      cardsReady={cardsReady}
+    />
   );
   // 迷你与列表档的控件栏借用小卡列宽，避免跟随密集内容列而被压窄。
   const borrowControlsGrid = isMini || isList;
