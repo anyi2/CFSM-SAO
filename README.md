@@ -1,5 +1,7 @@
 # SAO 系列探针主题 (SAO Series Probe Theme)
 
+> **Anyi2 CFSM-SAO 独立分支**：本仓库采用独立日期版本号（CalVer，`YYYY.MM.DD`），不跟随上游 SAO 项目版本递增。当前首个独立正式版本：`v2026.11.15`。
+
 <p align="center">
   <strong>服务于探针数据呈现本身的高自由度模块化主题</strong>
 </p>
