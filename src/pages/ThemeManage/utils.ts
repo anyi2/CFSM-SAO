@@ -163,6 +163,8 @@ export function pickManagedThemeSettings(settings: ResolvedThemeSettings) {
     desktopNodeViewMode: settings.desktopNodeViewMode,
     mobileNodeViewMode: settings.mobileNodeViewMode,
     serverCardTemplate: settings.serverCardTemplate,
+    instanceDetailModuleOrder: settings.instanceDetailModuleOrder,
+    instanceResourceCardOrder: settings.instanceResourceCardOrder,
     clusterOverviewMode: settings.clusterOverviewMode,
     matrixColorTheme: settings.matrixColorTheme,
     matrixMockFill: settings.matrixMockFill,
