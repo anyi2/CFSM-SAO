@@ -21,6 +21,7 @@ import { useNodeCardModel } from "@/hooks/useNodeCardModel";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
 import { HOMEPAGE_PING_BUCKET_COUNT } from "@/hooks/usePingOverview";
 import { speedRateColor } from "@/utils/metricTone";
+import { makeNodeSlug } from "@/utils/nodeSlug";
 import { supportsFineHover } from "@/utils/mediaQuery";
 import {
   healthBarSlotModel,
@@ -46,7 +47,7 @@ function MiniHeader({
   osName: string;
 }) {
   const detailLabels = nodeDetailLinkLabels(node.name, osName);
-  const detailHref = `/server/${encodeURIComponent(node.uuid)}`;
+  const detailHref = `/s/${encodeURIComponent(makeNodeSlug(node.name || node.uuid) || node.uuid)}`;
   return (
     <header className="mini-node-header">
       <Flag region={node.region} size={14} />
