@@ -84,6 +84,11 @@ export function Instance() {
     [maxHistoryHours],
   );
   const showPingChart = themeSettings.isReady && themeSettings.showPingChart;
+  const visibleDetailModuleOrder = themeSettings.instanceDetailModuleOrder.filter(
+    (id) =>
+      !themeSettings.instanceDetailModuleHidden.includes(id) &&
+      (id !== "pingChart" || showPingChart),
+  );
 
   const alignCharts = useCallback(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -157,11 +162,12 @@ export function Instance() {
       </Link>
       <InstanceDetails
         uuid={resolvedUuid}
-        moduleOrder={themeSettings.instanceDetailModuleOrder}
+        moduleOrder={visibleDetailModuleOrder}
         resourceOrder={themeSettings.instanceResourceCardOrder}
         chartControlsRef={chartControlsRef}
         onNodeReady={alignCharts}
         loadChart={
+          visibleDetailModuleOrder.includes("loadChart") ? (
           <>
             <div className="instance-chart-controls">
               <RangeSelector
@@ -172,9 +178,10 @@ export function Instance() {
             </div>
             <LoadChart uuid={resolvedUuid} hours={loadHours} active />
           </>
+          ) : null
         }
         pingChart={
-          showPingChart ? (
+          visibleDetailModuleOrder.includes("pingChart") && showPingChart ? (
             <>
               <div className="instance-chart-controls">
                 <RangeSelector
