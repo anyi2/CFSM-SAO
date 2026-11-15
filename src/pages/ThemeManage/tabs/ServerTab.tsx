@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Activity,
   ChevronDown,
@@ -5,6 +6,7 @@ import {
   Layers,
   LayoutGrid,
   LayoutTemplate,
+  GripVertical,
   RotateCcw,
   Rows3,
   Search,
@@ -18,7 +20,14 @@ import { QualityBars } from "@/components/node/QualityBars";
 import { SettingSelect, ToggleRow } from "../components/SettingControls";
 import { TaskBindingSection } from "../components/TaskBindingSection";
 import { HOME_SORT_FIELDS, HOME_SORT_FIELD_LABELS } from "@/utils/homeSort";
-import { STATUS_BAR_PRESETS, type StatusBarPreset } from "@/utils/themeSettings";
+import {
+  STATUS_BAR_PRESETS,
+  INSTANCE_DETAIL_MODULE_OPTIONS,
+  INSTANCE_RESOURCE_CARD_OPTIONS,
+  DEFAULT_INSTANCE_DETAIL_MODULE_ORDER,
+  DEFAULT_INSTANCE_RESOURCE_CARD_ORDER,
+  type StatusBarPreset,
+} from "@/utils/themeSettings";
 import { HOMEPAGE_MULTI_PING_MIN_COUNT, type HomepagePingTaskBindings } from "@/utils/pingTasks";
 import {
   NODE_VIEW_MODE_OPTIONS,
@@ -33,6 +42,100 @@ import type { ThemeDraft } from "../types";
 import type { NodeInfo, PingTask, PingLatencyColors, PingLatencyThresholds, PingLossColors, PingLossThresholds, TrafficSpectrumColors } from "@/types/cfsm";
 
 const EMPTY_ASSIGNED_CLIENTS: string[] = [];
+
+function OrderEditor<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly { id: T; label: string }[];
+  value: T[];
+  onChange: (next: T[]) => void;
+}) {
+  const [draggedId, setDraggedId] = useState<T | null>(null);
+
+  const move = (id: T, direction: -1 | 1) => {
+    const from = value.indexOf(id);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= value.length) return;
+    const next = [...value];
+    [next[from], next[to]] = [next[to], next[from]];
+    onChange(next);
+  };
+
+  const dropOn = (targetId: T) => {
+    if (!draggedId || draggedId === targetId) return;
+    const next = [...value];
+    const from = next.indexOf(draggedId);
+    const to = next.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    next.splice(from, 1);
+    next.splice(to, 0, draggedId);
+    onChange(next);
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5" role="list">
+      {value.map((id, index) => {
+        const option = options.find((item) => item.id === id);
+        if (!option) return null;
+        return (
+          <div
+            key={id}
+            role="listitem"
+            draggable
+            onDragStart={(event) => {
+              setDraggedId(id);
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", id);
+            }}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              dropOn(id);
+              setDraggedId(null);
+            }}
+            onDragEnd={() => setDraggedId(null)}
+            className={clsx(
+              "flex min-w-0 items-center gap-2 rounded-lg border border-(--hairline) bg-(--bg-card) px-3 py-2.5",
+              draggedId === id && "opacity-50",
+            )}
+          >
+            <GripVertical size={15} className="shrink-0 cursor-grab text-(--text-tertiary)" aria-hidden />
+            <span className="w-5 shrink-0 text-center font-mono text-[11px] text-(--text-tertiary)">
+              {index + 1}
+            </span>
+            <span className="min-w-0 flex-1 text-[12px] font-medium text-(--text-primary)">
+              {option.label}
+            </span>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                disabled={index === 0}
+                onClick={() => move(id, -1)}
+                className="theme-manage-button is-compact"
+                aria-label={`将${option.label}上移`}
+                title="上移"
+              >
+                <ChevronUp size={14} />
+              </button>
+              <button
+                type="button"
+                disabled={index === value.length - 1}
+                onClick={() => move(id, 1)}
+                className="theme-manage-button is-compact"
+                aria-label={`将${option.label}下移`}
+                title="下移"
+              >
+                <ChevronDown size={14} />
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export function ServerTab({
   draft,
@@ -147,6 +250,65 @@ export function ServerTab({
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      </InstancePanel>
+
+      <InstancePanel
+        id="set-instance-detail-layout"
+        kicker="详情页"
+        title="详情页布局"
+        description="独立调整实例详情页的模块和资源卡片位置，不影响首页指标卡池。桌面端可拖拽，手机端可使用上下箭头。"
+        aside={<Rows3 size={16} />}
+      >
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div className="surface-inset flex min-w-0 flex-col gap-3 px-4 py-4">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="setting-subhead-title">一级模块顺序</div>
+                <p className="setting-hint mt-1">系统、资源、网络和历史图表的整体位置。</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => patch("instanceDetailModuleOrder", [...DEFAULT_INSTANCE_DETAIL_MODULE_ORDER])}
+                className="theme-manage-button is-compact flex shrink-0 items-center gap-1"
+                title="恢复详情页模块默认顺序"
+              >
+                <RotateCcw size={12} />
+                重置
+              </button>
+            </div>
+            <OrderEditor
+              options={INSTANCE_DETAIL_MODULE_OPTIONS}
+              value={draft.instanceDetailModuleOrder}
+              onChange={(next) => patch("instanceDetailModuleOrder", next)}
+            />
+            {!draft.showPingChart && (
+              <p className="setting-hint">Ping 图表当前已在全局设置中关闭，重新开启后会按这里的顺序显示。</p>
+            )}
+          </div>
+
+          <div className="surface-inset flex min-w-0 flex-col gap-3 px-4 py-4">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="setting-subhead-title">资源卡片顺序</div>
+                <p className="setting-hint mt-1">调整 CPU、内存、Swap、磁盘四张指标卡的位置。</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => patch("instanceResourceCardOrder", [...DEFAULT_INSTANCE_RESOURCE_CARD_ORDER])}
+                className="theme-manage-button is-compact flex shrink-0 items-center gap-1"
+                title="恢复资源卡片默认顺序"
+              >
+                <RotateCcw size={12} />
+                重置
+              </button>
+            </div>
+            <OrderEditor
+              options={INSTANCE_RESOURCE_CARD_OPTIONS}
+              value={draft.instanceResourceCardOrder}
+              onChange={(next) => patch("instanceResourceCardOrder", next)}
+            />
           </div>
         </div>
       </InstancePanel>
