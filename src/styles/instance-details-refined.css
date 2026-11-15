@@ -104,6 +104,7 @@
 }
 
 .instance-info-groups--refined .instance-info-item {
+  min-width: 0;
   gap: 10px;
   padding: 7px 0;
 }
@@ -113,6 +114,8 @@
 }
 
 .instance-info-groups--refined .instance-info-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 11px;
 }
 
@@ -232,6 +235,12 @@
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.instance-traffic-reset {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.4;
 }
 
 .instance-traffic-quota {
