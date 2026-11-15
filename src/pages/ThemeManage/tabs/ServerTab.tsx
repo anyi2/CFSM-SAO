@@ -71,8 +71,9 @@ function OrderEditor<T extends string>({
     const from = next.indexOf(draggedId);
     const to = next.indexOf(targetId);
     if (from < 0 || to < 0) return;
-    next.splice(from, 1);
-    next.splice(to, 0, draggedId);
+    const [moved] = next.splice(from, 1);
+    if (!moved) return;
+    next.splice(to, 0, moved);
     onChange(next);
   };
 
