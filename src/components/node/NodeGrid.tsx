@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Flag } from "@/components/ui/Flag";
+import { OfflineNotificationToggle } from "@/components/node/OfflineNotificationToggle";
 import { OverviewStatCard } from "./OverviewStatCard";
 import { DraggableCostBall } from "@/components/node/DraggableCostBall";
 import { ClusterHeatmap } from "./ClusterHeatmap";
@@ -1355,6 +1356,7 @@ export function NodeGrid() {
                   <ArrowLeftRight size={14} />
                   多节点对比
                 </Link>
+                <OfflineNotificationToggle />
                 {showHomeSort && <HomeSortControl state={sort} />}
               </div>
             </div>
@@ -1374,6 +1376,7 @@ export function NodeGrid() {
                 多节点对比
               </Link>
             )}
+            {!showHomeOverview && <OfflineNotificationToggle />}
             {showGroupTabs && (
               <GroupTabs
                 groups={groupOptions}
