@@ -209,7 +209,7 @@ export function InstanceDetails({
     system: (
       <>
 {moduleOrder.includes("system") && (
-        <section className="instance-info-group instance-system-group" aria-label="系统信息" style={{ order: moduleOrder.indexOf("system") }}>
+        <section className="instance-info-group instance-system-group" aria-label="系统信息">
           <div className="instance-info-group-title">系统</div>
           <div className="instance-system-status">
             <span
@@ -258,7 +258,7 @@ export function InstanceDetails({
     resources: (
       <>
 {moduleOrder.includes("resources") && (
-        <section className="instance-info-group" aria-label="资源使用情况" style={{ order: moduleOrder.indexOf("resources") }}>
+        <section className="instance-info-group" aria-label="资源使用情况">
           <div className="instance-info-group-title">资源使用</div>
           <div className="instance-resource-grid">
             {resourceOrder.map((id) => (
@@ -291,7 +291,7 @@ export function InstanceDetails({
     network: (
       <>
 {moduleOrder.includes("network") && (
-        <section className="instance-info-group instance-network-group" aria-label="网络与流量" style={{ order: moduleOrder.indexOf("network") }}>
+        <section className="instance-info-group instance-network-group" aria-label="网络与流量">
           <div className="instance-info-group-title">
             网络{isOnline ? " · 实时" : " · 缓存"}
           </div>
@@ -379,7 +379,7 @@ export function InstanceDetails({
           <div
             ref={firstChartModule === "loadChart" ? chartControlsRef : undefined}
             className="instance-detail-chart-module"
-            style={{ order: moduleOrder.indexOf("loadChart") }}
+           
           >
             {loadChart}
           </div>
@@ -392,7 +392,7 @@ export function InstanceDetails({
           <div
             ref={firstChartModule === "pingChart" ? chartControlsRef : undefined}
             className="instance-detail-chart-module"
-            style={{ order: moduleOrder.indexOf("pingChart") }}
+           
           >
             {pingChart}
           </div>
