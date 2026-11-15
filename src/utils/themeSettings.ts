@@ -80,6 +80,8 @@ export const DEFAULT_INSTANCE_RESOURCE_CARD_ORDER: readonly InstanceResourceCard
   "disk",
 ] as const;
 
+export const DEFAULT_INSTANCE_DETAIL_MODULE_HIDDEN: readonly InstanceDetailModuleId[] = [] as const;
+
 export const INSTANCE_RESOURCE_CARD_OPTIONS: readonly {
   id: InstanceResourceCardId;
   label: string;
@@ -123,6 +125,16 @@ export function normalizeInstanceResourceCardOrder(raw: unknown): InstanceResour
     raw,
     DEFAULT_INSTANCE_RESOURCE_CARD_ORDER,
     DEFAULT_INSTANCE_RESOURCE_CARD_ORDER,
+  );
+}
+
+export function normalizeInstanceDetailModuleHidden(raw: unknown): InstanceDetailModuleId[] {
+  if (!Array.isArray(raw)) return [];
+  const valid = new Set<string>(DEFAULT_INSTANCE_DETAIL_MODULE_ORDER);
+  return Array.from(
+    new Set(raw.filter((value): value is InstanceDetailModuleId =>
+      typeof value === "string" && valid.has(value)
+    )),
   );
 }
 
@@ -361,6 +373,7 @@ export interface ResolvedThemeSettings {
   serverCardTemplate: ServerCardTemplate;
   instanceDetailModuleOrder: InstanceDetailModuleId[];
   instanceResourceCardOrder: InstanceResourceCardId[];
+  instanceDetailModuleHidden: InstanceDetailModuleId[];
   clusterOverviewMode: ClusterOverviewMode;
   matrixColorTheme: MatrixColorTheme;
   matrixMockFill: boolean;
@@ -431,6 +444,7 @@ export const DEFAULT_THEME_SETTINGS: ResolvedThemeSettings = {
   serverCardTemplate: "layered",
   instanceDetailModuleOrder: [...DEFAULT_INSTANCE_DETAIL_MODULE_ORDER],
   instanceResourceCardOrder: [...DEFAULT_INSTANCE_RESOURCE_CARD_ORDER],
+  instanceDetailModuleHidden: [...DEFAULT_INSTANCE_DETAIL_MODULE_HIDDEN],
   clusterOverviewMode: "classic",
   matrixColorTheme: "eva",
   matrixMockFill: false,
@@ -762,6 +776,7 @@ export function normalizeThemeSettings(
     ),
     instanceDetailModuleOrder: normalizeInstanceDetailModuleOrder(settings?.instanceDetailModuleOrder),
     instanceResourceCardOrder: normalizeInstanceResourceCardOrder(settings?.instanceResourceCardOrder),
+    instanceDetailModuleHidden: normalizeInstanceDetailModuleHidden(settings?.instanceDetailModuleHidden),
     clusterOverviewMode: normalizeClusterOverviewMode(settings?.clusterOverviewMode),
     matrixColorTheme: normalizeMatrixColorTheme(settings?.matrixColorTheme),
     matrixMockFill: normalizeMatrixMockFill(settings?.matrixMockFill),
