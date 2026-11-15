@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Download } from "lucide-react";
 import "uplot/dist/uPlot.min.css";
 import { InstanceDetails } from "@/components/instance/InstanceDetails";
 import { PingChart } from "@/components/instance/PingChart";
@@ -20,6 +20,8 @@ import {
 import { findNodesBySlug } from "@/utils/nodeSlug";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
 import { ANONYMOUS_MAX_HISTORY_HOURS } from "@/services/api";
+import { useLoadRecords, usePingRecords } from "@/hooks/useRecords";
+import { buildLoadRecordsCsv, buildPingRecordsCsv, downloadCsv } from "@/utils/csvExport";
 
 // 0.167（10 分钟）：官方规范铁律要求详情页默认 10 分钟历史曲线，大幅降低 D1 行读取。
 const DEFAULT_PING_HOURS = 0.167;
@@ -93,6 +95,21 @@ export function Instance() {
       !themeSettings.instanceDetailModuleHidden.includes(id) &&
       (id !== "pingChart" || showPingChart),
   );
+  // The charts and export buttons share the same React Query keys, avoiding duplicate history requests.
+  const loadRecordsQuery = useLoadRecords(
+    resolvedUuid ?? "",
+    loadHours,
+    Boolean(resolvedUuid) && visibleDetailModuleOrder.includes("loadChart"),
+  );
+  const pingRecordsQuery = usePingRecords(
+    resolvedUuid ?? "",
+    pingHours,
+    Boolean(resolvedUuid) && visibleDetailModuleOrder.includes("pingChart") && showPingChart,
+  );
+  const exportBaseName = (meta?.name?.trim() || resolvedUuid || "node")
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "node";
 
   const alignCharts = useCallback(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -208,12 +225,26 @@ export function Instance() {
         loadChart={
           visibleDetailModuleOrder.includes("loadChart") ? (
           <>
-            <div className="instance-chart-controls">
+            <div className="instance-chart-controls flex flex-wrap items-center justify-between gap-2">
               <RangeSelector
                 ranges={loadRanges}
                 value={loadHours}
                 onChange={setLoadHours}
               />
+              <button
+                type="button"
+                disabled={!loadRecordsQuery.data?.records.length}
+                onClick={() => {
+                  const records = loadRecordsQuery.data?.records;
+                  if (records?.length) {
+                    downloadCsv("cfsm-load-" + exportBaseName + "-" + loadHours + "h.csv", buildLoadRecordsCsv(records));
+                  }
+                }}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-(--hairline) px-3 py-2 text-[11px] font-medium text-(--text-secondary) disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Download size={13} />
+                导出 CSV
+              </button>
             </div>
             <LoadChart uuid={resolvedUuid} hours={loadHours} active />
           </>
@@ -222,12 +253,26 @@ export function Instance() {
         pingChart={
           visibleDetailModuleOrder.includes("pingChart") && showPingChart ? (
             <>
-              <div className="instance-chart-controls">
+              <div className="instance-chart-controls flex flex-wrap items-center justify-between gap-2">
                 <RangeSelector
                   ranges={pingRanges}
                   value={pingHours}
                   onChange={setPingHours}
                 />
+                <button
+                  type="button"
+                  disabled={!pingRecordsQuery.data?.records.length}
+                  onClick={() => {
+                    const data = pingRecordsQuery.data;
+                    if (data?.records.length) {
+                      downloadCsv("cfsm-ping-" + exportBaseName + "-" + pingHours + "h.csv", buildPingRecordsCsv(data.records, data.tasks));
+                    }
+                  }}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-(--hairline) px-3 py-2 text-[11px] font-medium text-(--text-secondary) disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Download size={13} />
+                  导出 CSV
+                </button>
               </div>
               <PingChart uuid={resolvedUuid} hours={pingHours} active />
             </>
