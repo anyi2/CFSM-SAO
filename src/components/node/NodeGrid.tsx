@@ -113,6 +113,124 @@ interface HomeOverview {
   carrierLoss?: CarrierLossSummary | null;
 }
 
+type HomeFilterPreset = {
+  id: string;
+  name: string;
+  group: string;
+  region: string;
+};
+
+const HOME_FILTER_PRESETS_KEY = "cfsm-sao:home-filter-presets";
+
+function readHomeFilterPresets(): HomeFilterPreset[] {
+  try {
+    const raw = window.localStorage.getItem(HOME_FILTER_PRESETS_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is HomeFilterPreset =>
+      Boolean(item) &&
+      typeof item === "object" &&
+      typeof item.id === "string" &&
+      typeof item.name === "string" &&
+      typeof item.group === "string" &&
+      typeof item.region === "string",
+    ).slice(-20);
+  } catch {
+    return [];
+  }
+}
+
+function LocalFilterPresets({
+  group,
+  region,
+  availableGroups,
+  availableRegions,
+  onApply,
+}: {
+  group: string;
+  region: string;
+  availableGroups: string[];
+  availableRegions: string[];
+  onApply: (group: string, region: string) => void;
+}) {
+  const [presets, setPresets] = useState<HomeFilterPreset[]>(readHomeFilterPresets);
+  const [name, setName] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const persist = (next: HomeFilterPreset[]) => {
+    setPresets(next);
+    try {
+      window.localStorage.setItem(HOME_FILTER_PRESETS_KEY, JSON.stringify(next));
+    } catch {
+      setNotice("浏览器本地存储不可用");
+    }
+  };
+
+  const save = () => {
+    const trimmed = name.trim().slice(0, 24);
+    if (!trimmed) return;
+    const preset: HomeFilterPreset = {
+      id: "preset-" + Date.now().toString(36),
+      name: trimmed,
+      group,
+      region,
+    };
+    persist([...presets.filter((item) => item.name !== trimmed), preset].slice(-20));
+    setSelectedId(preset.id);
+    setName("");
+    setNotice("已保存到本设备");
+  };
+
+  const apply = (id: string) => {
+    setSelectedId(id);
+    const preset = presets.find((item) => item.id === id);
+    if (!preset) return;
+    const nextGroup = preset.group === HOME_ALL_GROUP || availableGroups.includes(preset.group)
+      ? preset.group
+      : HOME_ALL_GROUP;
+    const nextRegion = preset.region === HOME_ALL_REGION || availableRegions.includes(preset.region)
+      ? preset.region
+      : HOME_ALL_REGION;
+    onApply(nextGroup, nextRegion);
+    setNotice("已应用筛选预设");
+  };
+
+  const remove = () => {
+    if (!selectedId) return;
+    persist(presets.filter((item) => item.id !== selectedId));
+    setSelectedId("");
+    setNotice("已删除本地预设");
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-(--hairline) bg-(--bg-card) px-3 py-2">
+      <span className="text-[11px] text-(--text-tertiary)">本地筛选预设</span>
+      <select
+        value={selectedId}
+        onChange={(event) => apply(event.target.value)}
+        aria-label="选择本地筛选预设"
+        className="min-w-[140px] rounded-lg border border-(--hairline) bg-(--bg-surface) px-2 py-1.5 text-[11px] text-(--text-primary)"
+      >
+        <option value="">选择预设</option>
+        {presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+      </select>
+      <input
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        maxLength={24}
+        placeholder="预设名称"
+        aria-label="新筛选预设名称"
+        className="w-28 rounded-lg border border-(--hairline) bg-(--bg-surface) px-2 py-1.5 text-[11px] text-(--text-primary)"
+      />
+      <button type="button" disabled={!name.trim()} onClick={save} className="rounded-lg border border-(--hairline) px-2.5 py-1.5 text-[11px] text-(--text-secondary) disabled:opacity-40">保存当前</button>
+      <button type="button" disabled={!selectedId} onClick={remove} className="rounded-lg border border-(--hairline) px-2.5 py-1.5 text-[11px] text-(--text-secondary) disabled:opacity-40">删除</button>
+      {notice && <span className="text-[10px] text-(--text-tertiary)" role="status">{notice}</span>}
+    </div>
+  );
+}
+
 function HomeBrand({ siteName }: { siteName: string }) {
   return (
     <header className="home-brand sr-only" aria-label="站点名称">
@@ -1392,6 +1510,18 @@ export function NodeGrid() {
             regions={regionOptions}
             selectedRegion={selectedRegion}
             onSelectRegion={setSelectedRegion}
+          />
+        )}
+        {(showGroupTabs || showRegionBar) && (
+          <LocalFilterPresets
+            group={selectedGroup}
+            region={selectedRegion}
+            availableGroups={groupOptions}
+            availableRegions={regionOptions.map((item) => item.code)}
+            onApply={(group, region) => {
+              setSelectedGroup(group);
+              setSelectedRegion(region);
+            }}
           />
         )}
         {isList ? (
