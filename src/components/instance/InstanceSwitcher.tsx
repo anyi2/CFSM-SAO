@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAllNodeMeta, useHomeNodeSummaries } from "@/hooks/useNode";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
 import { collectMatchingNodeUuids } from "@/utils/nodeIdentity";
+import { makeNodeSlug } from "@/utils/nodeSlug";
 
 export function InstanceSwitcher({ currentUuid }: { currentUuid: string }) {
   const allMeta = useAllNodeMeta();
@@ -83,7 +84,11 @@ export function InstanceSwitcher({ currentUuid }: { currentUuid: string }) {
   const select = (uuid: string) => {
     triggerRef.current?.focus();
     setOpen(false);
-    if (uuid !== currentUuid) navigate(`/server/${encodeURIComponent(uuid)}`);
+    if (uuid !== currentUuid) {
+      const selected = nodes.find((node) => node.uuid === uuid);
+      const slug = makeNodeSlug(selected?.name || uuid);
+      navigate(`/s/${encodeURIComponent(slug || uuid)}`);
+    }
   };
 
   const handleListKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
