@@ -161,6 +161,9 @@ describe("toNodeInfo", () => {
 
     expect(info.uuid).toBe("node-a");
     expect(info.group).toBe("prod");
+    expect(info.region).toBe("JP");
+    expect(info.traffic_reset_day).toBe(5);
+    expect(info.report_interval).toBe(60);
     expect(info.weight).toBe(7);
     expect(info.hidden).toBe(true);
     expect(info.auto_renewal).toBe(false);
@@ -174,6 +177,14 @@ describe("toNodeInfo", () => {
     expect(toNodeInfo(server({ price: "0" })).price).toBe(0);
     expect(toNodeInfo(server({ price: "" })).price).toBeNull();
     expect(toNodeInfo(server({ price: "-3" })).price).toBeNull();
+  });
+
+  it("maps agent version and region metadata without inventing IP addresses", () => {
+    const info = toNodeInfo(server({ agent_version: "1.2.3", region: "Tokyo", ip_v4: "0", ip_v6: "1" }));
+    expect(info.agent_version).toBe("1.2.3");
+    expect(info.region).toBe("Tokyo");
+    expect(info.ipv4).toBe("");
+    expect(info.ipv6).toBe("1");
   });
 
   it("keeps IP reachability as a flag, since no address is exposed", () => {
