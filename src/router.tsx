@@ -48,6 +48,10 @@ export const router = createHashRouter([
         element: <Home />,
       },
       {
+        path: "s/:slug",
+        element: suspended(<Instance />),
+      },
+      {
         path: "server/:uuid",
         element: suspended(<Instance />),
       },
