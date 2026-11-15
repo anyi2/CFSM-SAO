@@ -20,7 +20,7 @@ describe("CSV export", () => {
 
   it("protects spreadsheet cells that begin with formula characters", () => {
     const csv = buildLoadRecordsCsv([{ ...sampleLoad, client: '=HYPERLINK("https://evil.test","open")' }]);
-    expect(csv).toContain("'=HYPERLINK(""https://evil.test"",""open"")");
+    expect(csv).toContain(`'=HYPERLINK(""https://evil.test"",""open"")`);
   });
 
   it("exports a timed-out ping as timeout with an empty latency cell", () => {

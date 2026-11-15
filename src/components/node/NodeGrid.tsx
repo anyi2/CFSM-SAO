@@ -1517,7 +1517,7 @@ export function NodeGrid() {
             group={selectedGroup}
             region={selectedRegion}
             availableGroups={groupOptions}
-            availableRegions={regionOptions.map((item) => item.code)}
+            availableRegions={getHomeRegionOptions(visibleNodes).map((item) => item.code)}
             onApply={(group, region) => {
               setSelectedGroup(group);
               setSelectedRegion(region);
