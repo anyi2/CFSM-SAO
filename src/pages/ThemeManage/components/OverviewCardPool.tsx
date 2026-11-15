@@ -275,8 +275,8 @@ export function OverviewCardPool<D extends OverviewCardPoolDraft>({
             </span>
           </div>
           <span className="text-[10px] text-(--text-muted)">
-            <span className="theme-manage-guide-mouse">拖拽调序，点击对调或更换</span>
-            <span className="theme-manage-guide-touch">点两张卡对调，点闲置卡更换</span>
+            <span className="theme-manage-guide-mouse">拖拽调序；点卡片对调；× 移除；闲置卡添加</span>
+            <span className="theme-manage-guide-touch">点两张卡对调，点 × 移除；闲置卡添加</span>
           </span>
         </div>
 

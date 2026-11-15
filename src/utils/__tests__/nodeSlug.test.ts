@@ -37,6 +37,10 @@ describe("makeNodeSlug", () => {
     expect(findNodesBySlug(nodes, "Tokyo").map((node) => node.uuid)).toEqual(["node-a", "node-b"]);
   });
 
+  it("uses UUIDs when a configured hostname contains only whitespace", () => {
+    expect(findNodesBySlug([{ uuid: "node-a", name: "   " }], "node-a")).toHaveLength(1);
+  });
+
   it("uses UUIDs for nodes without a configured name", () => {
     expect(findNodesBySlug([{ uuid: "node-a", name: "" }], "node-a")).toHaveLength(1);
   });
