@@ -8,5 +8,5 @@ export function findNodesBySlug<T extends { uuid: string; name?: string | null }
   nodes: readonly T[],
   slug: string,
 ): T[] {
-  return nodes.filter((node) => makeNodeSlug(node.name || node.uuid) === slug);
+  return nodes.filter((node) => (makeNodeSlug(node.name || "") || node.uuid) === slug);
 }

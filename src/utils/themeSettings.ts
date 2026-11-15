@@ -346,46 +346,6 @@ export function normalizeOverviewCards(raw: unknown): OverviewCardId[] {
     }
   }
   return result;
-}export function normalizeOverviewCards(raw: unknown): OverviewCardId[] {
-  const allIds = new Set<OverviewCardId>(ALL_OVERVIEW_CARD_IDS);
-  const result: OverviewCardId[] = [];
-
-  const candidates: unknown[] = Array.isArray(raw)
-    ? raw
-    : typeof raw === "object" && raw !== null && "overviewCards" in raw && Array.isArray((raw as { overviewCards: unknown }).overviewCards)
-      ? (raw as { overviewCards: unknown[] }).overviewCards
-      : [];
-
-  for (const item of candidates) {
-    if (
-      typeof item === "string" &&
-      allIds.has(item as OverviewCardId) &&
-      !result.includes(item as OverviewCardId)
-    ) {
-      result.push(item as OverviewCardId);
-      if (result.length === OVERVIEW_CARD_SLOT_COUNT) break;
-    }
-  }
-
-  if (result.length < OVERVIEW_CARD_SLOT_COUNT) {
-    for (const id of DEFAULT_OVERVIEW_CARDS) {
-      if (!result.includes(id)) {
-        result.push(id);
-        if (result.length === OVERVIEW_CARD_SLOT_COUNT) break;
-      }
-    }
-  }
-
-  if (result.length < OVERVIEW_CARD_SLOT_COUNT) {
-    for (const id of ALL_OVERVIEW_CARD_IDS) {
-      if (!result.includes(id)) {
-        result.push(id);
-        if (result.length === OVERVIEW_CARD_SLOT_COUNT) break;
-      }
-    }
-  }
-
-  return result.slice(0, OVERVIEW_CARD_SLOT_COUNT);
 }
 
 export interface ResolvedThemeSettings {
