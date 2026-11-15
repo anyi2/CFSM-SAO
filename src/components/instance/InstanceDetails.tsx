@@ -16,6 +16,8 @@ import { InstancePanel } from "./InstancePanel";
 import "@/styles/instance-details-refined.css";
 
 const TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
+  month: "2-digit",
+  day: "2-digit",
   hour: "2-digit",
   minute: "2-digit",
   second: "2-digit",
@@ -122,8 +124,9 @@ export function InstanceDetails({
     metrics.trafficDownMonthly,
     meta.traffic_limit,
   );
+  const hasReportedMetrics = metrics.updatedAt > 0;
   const lastUpdated =
-    metrics.updatedAt > 0 ? TIME_FORMATTER.format(metrics.updatedAt) : "—";
+    hasReportedMetrics ? TIME_FORMATTER.format(metrics.updatedAt) : "尚无上报记录";
   const trimmedName = meta.name?.trim();
   const panelTitle = trimmedName ? trimmedName + " 信息" : "实例信息";
 
@@ -166,7 +169,11 @@ export function InstanceDetails({
             }
           />
           <InfoRow label="架构" value={meta.arch || "—"} />
+          <InfoRow label="区域 / 分组" value={[meta.region, meta.group].filter(Boolean).join(" · ") || "未设置"} />
           <InfoRow label="显卡" value={meta.gpu_name || "—"} />
+          <InfoRow label="Agent 版本" value={meta.agent_version || "未知"} />
+          <InfoRow label="网络协议" value={[meta.ipv4 ? "IPv4" : "", meta.ipv6 ? "IPv6" : ""].filter(Boolean).join(" / ") || "未报告可用地址"} />
+          <InfoRow label="上报间隔" value={meta.report_interval > 0 ? meta.report_interval + " 秒" : "未提供"} />
           <InfoRow label="操作系统" value={meta.os || "—"} />
           <InfoRow label="内核版本" value={meta.kernel_version || "—"} />
         </section>
@@ -177,14 +184,14 @@ export function InstanceDetails({
             <MetricCard
               title="CPU"
               icon={<Cpu size={15} />}
-              percent={Number.isFinite(metrics.cpuPct) ? metrics.cpuPct : null}
+              percent={hasReportedMetrics && Number.isFinite(metrics.cpuPct) ? metrics.cpuPct : null}
               detail="处理器使用率"
               tone="cpu"
             />
             <MetricCard
               title="内存"
               icon={<MemoryStick size={15} />}
-              percent={ramPercent}
+              percent={hasReportedMetrics ? ramPercent : null}
               detail={
                 metrics.ramTotal > 0
                   ? formatBytes(metrics.ramUsed) + " / " + formatBytes(metrics.ramTotal)
@@ -195,7 +202,7 @@ export function InstanceDetails({
             <MetricCard
               title="Swap"
               icon={<Layers size={15} />}
-              percent={swapPercent}
+              percent={hasReportedMetrics ? swapPercent : null}
               detail={
                 metrics.swapTotal > 0
                   ? formatBytes(metrics.swapUsed) + " / " + formatBytes(metrics.swapTotal)
@@ -206,7 +213,7 @@ export function InstanceDetails({
             <MetricCard
               title="磁盘"
               icon={<HardDrive size={15} />}
-              percent={diskPercent}
+              percent={hasReportedMetrics ? diskPercent : null}
               detail={
                 metrics.diskTotal > 0
                   ? formatBytes(metrics.diskUsed) + " / " + formatBytes(metrics.diskTotal)
@@ -216,15 +223,19 @@ export function InstanceDetails({
             />
           </div>
           <InfoRow
-            label="系统负载"
+            label="系统负载（1 / 5 / 15 分钟）"
             value={
-              metrics.load1.toFixed(2) +
-              " · " +
-              metrics.load5.toFixed(2) +
-              " · " +
-              metrics.load15.toFixed(2)
+              metrics.loadAvailable
+                ? metrics.load1.toFixed(2) + " · " + metrics.load5.toFixed(2) + " · " + metrics.load15.toFixed(2)
+                : "暂无有效采样"
             }
           />
+          {meta.gpu_name && (
+            <InfoRow
+              label="GPU 使用率"
+              value={metrics.gpuPctAvailable ? metrics.gpuPct.toFixed(1) + "%" : "利用率数据不可用"}
+            />
+          )}
           <InfoRow
             label="运行时长"
             value={uptime.unit ? uptime.value + " " + uptime.unit : uptime.value}
@@ -257,8 +268,8 @@ export function InstanceDetails({
           <div className="instance-traffic-block">
             <div className="instance-traffic-heading">
               <span>周期流量</span>
-              <span className="instance-traffic-type">
-                {trafficTypeLabel(meta.traffic_limit_type)}
+              <span className="instance-traffic-type" title="配额统计口径：按上行、下行、上下行合计或上下行较大/较小值计算">
+                {trafficTypeLabel(meta.traffic_limit_type)} · 统计口径
               </span>
             </div>
             <div className="instance-traffic-directions">
@@ -275,6 +286,9 @@ export function InstanceDetails({
                 </strong>
               </div>
             </div>
+            {meta.traffic_reset_day > 0 && (
+              <div className="instance-traffic-reset">每月 {meta.traffic_reset_day} 日重置</div>
+            )}
             <div className="instance-traffic-quota">
               {meta.traffic_limit > 0 ? (
                 <>
