@@ -434,3 +434,50 @@
   }
 }
 
+
+
+/* Detail page modules share one ordered grid; charts span the full available row. */
+.instance-detail-title-only {
+  margin-bottom: 0;
+}
+
+.instance-detail-module-layout {
+  align-items: stretch;
+}
+
+.instance-detail-module-layout > .instance-info-group {
+  min-width: 0;
+}
+
+.instance-detail-module-layout > .instance-detail-chart-module {
+  grid-column: 1 / -1;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.instance-detail-chart-module > .instance-panel {
+  min-width: 0;
+  width: 100%;
+}
+
+.instance-detail-module-layout > .instance-info-group:last-child {
+  grid-column: auto;
+}
+
+@media (max-width: 1100px) {
+  .instance-detail-module-layout > .instance-info-group:last-child {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .instance-detail-module-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .instance-detail-module-layout > .instance-detail-chart-module {
+    grid-column: auto;
+  }
+}
