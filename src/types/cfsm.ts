@@ -594,6 +594,8 @@ export interface ThemeSettings {
   instanceDetailModuleOrder?: InstanceDetailModuleId[];
   /** 详情页资源概览中的指标卡顺序。 */
   instanceResourceCardOrder?: InstanceResourceCardId[];
+  /** 详情页独立隐藏的模块；空数组表示全部显示。 */
+  instanceDetailModuleHidden?: InstanceDetailModuleId[];
   enableAdminButton?: boolean;
   showPingChart?: boolean;
   homepagePingBindings?: Record<string, string[]>;
