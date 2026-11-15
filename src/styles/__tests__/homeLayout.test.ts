@@ -55,7 +55,8 @@ describe("home responsive layout contracts", () => {
       /from\s+["']\.\/(?:MetricBar|LatencyBars|QualityBars|CanvasStrip)["']/,
     );
     expect(miniSource).not.toContain("<canvas");
-    expect(miniSource).toContain("encodeURIComponent(node.uuid)");
+    expect(miniSource).toContain("makeNodeSlug(node.name || node.uuid)");
+    expect(miniSource).toContain("encodeURIComponent(makeNodeSlug(node.name || node.uuid) || node.uuid)");
   });
 
   it("does not render zero-value overview cards before the node store is hydrated", () => {
