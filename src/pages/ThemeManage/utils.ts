@@ -165,6 +165,7 @@ export function pickManagedThemeSettings(settings: ResolvedThemeSettings) {
     serverCardTemplate: settings.serverCardTemplate,
     instanceDetailModuleOrder: settings.instanceDetailModuleOrder,
     instanceResourceCardOrder: settings.instanceResourceCardOrder,
+    instanceDetailModuleHidden: settings.instanceDetailModuleHidden,
     clusterOverviewMode: settings.clusterOverviewMode,
     matrixColorTheme: settings.matrixColorTheme,
     matrixMockFill: settings.matrixMockFill,
