@@ -11,7 +11,13 @@ import {
   buildPingTimeRangeOptions,
 } from "@/components/instance/chartShared";
 import { useAuth } from "@/hooks/useAuth";
-import { useNodeMeta, useNodeStoreStatus, useRealtimeFocus } from "@/hooks/useNode";
+import {
+  useAllNodeMeta,
+  useNodeMeta,
+  useNodeStoreStatus,
+  useRealtimeFocus,
+} from "@/hooks/useNode";
+import { makeNodeSlug } from "@/utils/nodeSlug";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
 import { ANONYMOUS_MAX_HISTORY_HOURS } from "@/services/api";
 
@@ -49,13 +55,17 @@ function RangeSelector({
 }
 
 export function Instance() {
-  const { uuid } = useParams<{ uuid: string }>();
+  const { uuid, slug } = useParams<{ uuid: string; slug: string }>();
+  const allNodes = useAllNodeMeta();
+  const resolvedUuid = slug
+    ? allNodes.find((node) => makeNodeSlug(node.name || node.uuid) === slug)?.uuid
+    : uuid;
   const { data: me } = useAuth();
   const themeSettings = useThemeSettings();
-  const meta = useNodeMeta(uuid ?? "");
-  const storeStatus = useNodeStoreStatus(Boolean(uuid));
-  // 详情页只订阅这一台的实时推送（后端文档：详情页不要订阅全量再在前端过滤）。
-  useRealtimeFocus(uuid);
+  const meta = useNodeMeta(resolvedUuid ?? "");
+  const storeStatus = useNodeStoreStatus(Boolean(uuid || slug));
+  // 详情页和实时数据始终使用后端原始 UUID；URL 中的主机名只负责定位节点。
+  useRealtimeFocus(resolvedUuid);
   const [chartType, setChartType] = useState<"load" | "ping">("load");
   const [loadHours, setLoadHours] = useState(DEFAULT_LOAD_HOURS);
   const [pingHours, setPingHours] = useState(DEFAULT_PING_HOURS);
@@ -113,9 +123,9 @@ export function Instance() {
     }
   }, [chartType, showPingChart]);
 
-  if (!uuid) return null;
+  if (!uuid && !slug) return null;
 
-  if (!meta) {
+  if (!resolvedUuid || !meta) {
     const message = storeStatus.hydrated
       ? "找不到这个实例，它可能已被删除或链接无效。"
       : storeStatus.nodeInfoError
@@ -152,7 +162,7 @@ export function Instance() {
         <ChevronLeft size={14} />
         返回
       </Link>
-      <InstanceDetails uuid={uuid} onNodeReady={alignCharts} />
+      <InstanceDetails uuid={resolvedUuid} onNodeReady={alignCharts} />
       <div ref={chartControlsRef} className="instance-chart-controls">
         <div className="instance-segmented">
           <button
@@ -199,7 +209,7 @@ export function Instance() {
           hidden={chartType !== "load"}
           aria-hidden={chartType !== "load"}
         >
-          <LoadChart uuid={uuid} hours={loadHours} active={chartType === "load"} />
+          <LoadChart uuid={resolvedUuid} hours={loadHours} active={chartType === "load"} />
         </div>
         <div
           className="instance-chart-view"
@@ -208,7 +218,7 @@ export function Instance() {
         >
           {showPingChart ? (
             <PingChart
-              uuid={uuid}
+              uuid={resolvedUuid}
               hours={pingHours}
               active={chartType === "ping"}
             />
