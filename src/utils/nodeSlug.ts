@@ -1,11 +1,4 @@
-/** Convert a configured host name into its stable, readable detail-route slug. */
+/** Keep the configured host name intact; encode it as one URL path segment at navigation time. */
 export function makeNodeSlug(name: string): string {
-  return name
-    .normalize("NFKC")
-    .trim()
-    .toLocaleLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[/?#%\\]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+  return name.trim();
 }
