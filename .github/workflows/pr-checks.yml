@@ -17,11 +17,36 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
+
+      - name: Require release note update for every merge to main
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_REF"
+          if ! git diff --name-only "origin/${BASE_REF}...HEAD" | grep -Fxq "CHANGELOG.md"; then
+            echo "::error::Every PR merged into main must update CHANGELOG.md."
+            exit 1
+          fi
+          version="v$(node -p "require('./package.json').version")"
+          note="$(awk -v want="## ${version}" '
+            $0 == want { found = 1; next }
+            found && /^## / { exit }
+            found && NF { print; exit }
+          ' CHANGELOG.md)"
+          if [ -z "$note" ]; then
+            echo "::error::CHANGELOG.md must contain a non-empty entry under ## ${version}."
+            exit 1
+          fi
+          echo "Release note verified for ${version}: $note"
 
       - name: Install dependencies
         run: npm ci
