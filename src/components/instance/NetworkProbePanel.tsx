@@ -88,7 +88,9 @@ function rowsFromResult(task: ProbeTask, result: ProbeResult): ResultRow[] {
   const raw = asRecord(result.raw);
   if (task.provider === "check-host") {
     const nodeMeta = asRecord(task.nodes);
-    for (const [nodeId, value] of Object.entries(raw)) {
+    const nodeIds = new Set([...Object.keys(nodeMeta), ...Object.keys(raw)]);
+    for (const nodeId of nodeIds) {
+      const value = raw[nodeId] ?? null;
       const meta = nodeMeta[nodeId];
       const location = Array.isArray(meta) ? meta : [];
       const country = String(location[1] || "");
@@ -387,17 +389,22 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
     if (!activeTasks.length) { setRunning(false); setError("所有平台任务提交失败，请检查 API 配置与额度。"); return; }
 
     const latest: Partial<Record<ProbeProviderId, ProbeResult>> = {};
+    const terminalErrors = new Set<ProbeProviderId>();
     for (let attempt = 0; attempt < 12; attempt += 1) {
       const settled = await Promise.all(activeTasks.map(async (task) => {
         try { return await getProbeResult(config, task.provider, task.taskId); }
         catch (caught) {
+          terminalErrors.add(task.provider);
           setProviderErrors((current) => ({ ...current, [task.provider]: caught instanceof Error ? caught.message : "结果查询失败" }));
           return null;
         }
       }));
       settled.forEach((result) => { if (result) latest[result.provider] = result; });
       setResults({ ...latest });
-      if (activeTasks.every((task) => latest[task.provider] && !latest[task.provider]?.pending)) break;
+      if (activeTasks.every((task) =>
+        terminalErrors.has(task.provider) ||
+        (latest[task.provider] !== undefined && !latest[task.provider]?.pending)
+      )) break;
       if (attempt < 11) await new Promise((resolve) => setTimeout(resolve, 10_000));
     }
     setRunning(false);
