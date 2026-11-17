@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from "@/utils/abort";
+
 export type PortCheckProtocol = "tcp" | "udp";
 export type PortCheckRegion = "ALL" | "CN" | "AS" | "EU" | "NA";
 
@@ -157,16 +159,26 @@ async function requestJson<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   throwIfAborted(signal);
-  const response = await fetch(`${API_ORIGIN}${path}`, {
-    ...init,
-    signal,
-    mode: "cors",
-    credentials: "omit",
-    headers: {
-      Accept: "application/json",
-      ...(init.headers ?? {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      `${API_ORIGIN}${path}`,
+      {
+        ...init,
+        mode: "cors",
+        credentials: "omit",
+        headers: {
+          Accept: "application/json",
+          ...(init.headers ?? {}),
+        },
+      },
+      10_000,
+      signal,
+    );
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new Error("连接端口检测服务超时或网络不可达，请稍后重试");
+  }
   let payload: unknown;
   try {
     payload = await response.json();
