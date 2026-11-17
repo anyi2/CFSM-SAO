@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildGlobalpingMeasurementRequest,
+  createGlobalpingMeasurement,
   findServerIpv4,
+  parseGlobalpingRateLimit,
   getCarrierProbeCoverage,
   isPublicIpv4,
   parseGlobalpingMeasurement,
@@ -98,6 +100,7 @@ describe("Globalping probe coverage and location selection", () => {
 
   it("selects one probe per mainland carrier and only Japan, Hong Kong and US overseas", () => {
     const request = buildGlobalpingMeasurementRequest("45.67.89.10", 443, probes);
+    expect(request.inProgressUpdates).toBe(true);
     expect(request.type).toBe("ping");
     expect(request.measurementOptions).toEqual({ protocol: "TCP", port: 443, packets: 3 });
     expect(request.locations).toEqual([
@@ -109,6 +112,14 @@ describe("Globalping probe coverage and location selection", () => {
       { country: "US", tags: ["datacenter-network"], limit: 1 },
     ]);
     expect(request.locations).toHaveLength(6);
+  });
+
+  it("reuses the baseline measurement ID to keep the exact probe group across protocols", () => {
+    const request = buildGlobalpingMeasurementRequest("45.67.89.10", 443, probes, "UDP", "baseline-measurement-id");
+    expect(request.type).toBe("mtr");
+    expect(request.locations).toBe("baseline-measurement-id");
+    expect(request.inProgressUpdates).toBe(true);
+    expect(request.measurementOptions).toEqual({ protocol: "UDP", port: 443, packets: 3 });
   });
 
   it("builds ICMP ping without requiring or sending a destination port", () => {
@@ -245,5 +256,30 @@ describe("parseGlobalpingMeasurement", () => {
       }],
     }, "ICMP");
     expect(rows[0]?.status).toBe("pending");
+  });
+});
+
+describe("Globalping rate-limit parsing", () => {
+  it("parses the live quota and optional remaining credits", () => {
+    expect(parseGlobalpingRateLimit({
+      rateLimit: { measurements: { create: { type: "ip", limit: 250, remaining: 214, reset: 137 } } },
+      credits: { remaining: 9 },
+    })).toMatchObject({ type: "ip", limit: 250, remaining: 214, resetSeconds: 137, creditsRemaining: 9 });
+  });
+
+  it("returns null for incomplete limits responses", () => {
+    expect(parseGlobalpingRateLimit({ rateLimit: {} })).toBeNull();
+    expect(parseGlobalpingRateLimit(null)).toBeNull();
+  });
+
+  it("captures quota headers on a rate-limited measurement create", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ error: { type: "rate_limit_exceeded", message: "Hourly limit exceeded" } }), {
+      status: 429,
+      headers: { "Content-Type": "application/json", "X-RateLimit-Limit": "250", "X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "90" },
+    }));
+    await expect(createGlobalpingMeasurement({
+      type: "ping", target: "45.67.89.10", locations: [{ country: "CN", asn: 4134, limit: 1 }], inProgressUpdates: true,
+      measurementOptions: { protocol: "ICMP", packets: 3 },
+    })).rejects.toMatchObject({ name: "GlobalpingApiError", status: 429, rateLimit: { limit: 250, remaining: 0, resetSeconds: 90 } });
   });
 });
