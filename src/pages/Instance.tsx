@@ -70,7 +70,7 @@ export function Instance() {
       : undefined
     : uuid;
   const auth = useAuth();
-  const { data: me } = auth;
+  const { data: me, refetch: refetchAuth } = auth;
   const authRefreshRequested = useRef(false);
 
   // Do not trust a cached/JWT-derived initial snapshot for admin-only tools.
@@ -79,8 +79,8 @@ export function Instance() {
     if (authRefreshRequested.current) return;
     authRefreshRequested.current = true;
     invalidateSiteConfigCache();
-    void auth.refetch();
-  }, [auth.refetch]);
+    void refetchAuth();
+  }, [refetchAuth]);
   const themeSettings = useThemeSettings();
   const carrierNames = useCarrierNames();
   const meta = useNodeMeta(resolvedUuid ?? "");
