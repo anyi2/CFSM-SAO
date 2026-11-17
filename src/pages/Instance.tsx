@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { ChevronLeft, Download } from "lucide-react";
 import "uplot/dist/uPlot.min.css";
 import { InstanceDetails } from "@/components/instance/InstanceDetails";
+import { PortCheckPanel } from "@/components/instance/PortCheckPanel";
 import { PingChart } from "@/components/instance/PingChart";
 import { LoadChart } from "@/components/instance/LoadChart";
 import { Spinner } from "@/components/ui/Spinner";
@@ -19,7 +20,7 @@ import {
 } from "@/hooks/useNode";
 import { findNodesBySlug } from "@/utils/nodeSlug";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
-import { ANONYMOUS_MAX_HISTORY_HOURS } from "@/services/api";
+import { ANONYMOUS_MAX_HISTORY_HOURS, invalidateSiteConfigCache } from "@/services/api";
 import { useLoadRecords, usePingRecords } from "@/hooks/useRecords";
 import { useCarrierNames } from "@/hooks/usePublicConfig";
 import { carrierTaskName } from "@/services/cfsm/mappers";
@@ -68,7 +69,18 @@ export function Instance() {
       ? slugMatches[0].uuid
       : undefined
     : uuid;
-  const { data: me } = useAuth();
+  const auth = useAuth();
+  const { data: me, refetch: refetchAuth } = auth;
+  const authRefreshRequested = useRef(false);
+
+  // Do not trust a cached/JWT-derived initial snapshot for admin-only tools.
+  // Revalidate the actual CFSM session on each details-page mount.
+  useEffect(() => {
+    if (authRefreshRequested.current) return;
+    authRefreshRequested.current = true;
+    invalidateSiteConfigCache();
+    void refetchAuth();
+  }, [refetchAuth]);
   const themeSettings = useThemeSettings();
   const carrierNames = useCarrierNames();
   const meta = useNodeMeta(resolvedUuid ?? "");
@@ -225,6 +237,7 @@ export function Instance() {
         resourceOrder={themeSettings.instanceResourceCardOrder}
         chartControlsRef={chartControlsRef}
         onNodeReady={alignCharts}
+        portCheck={auth.isFetchedAfterMount && auth.isSuccess && me?.logged_in ? <PortCheckPanel nodeName={meta.name} /> : null}
         loadChart={
           visibleDetailModuleOrder.includes("loadChart") ? (
           <>

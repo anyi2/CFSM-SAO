@@ -121,6 +121,7 @@ export function InstanceDetails({
   pingChart,
   chartControlsRef,
   onNodeReady,
+  portCheck,
 }: {
   uuid: string;
   moduleOrder?: InstanceDetailModuleId[];
@@ -129,6 +130,7 @@ export function InstanceDetails({
   pingChart?: ReactNode;
   chartControlsRef?: RefObject<HTMLDivElement | null>;
   onNodeReady?: () => (() => void) | void;
+  portCheck?: ReactNode;
 }) {
   const meta = useNodeMeta(uuid);
   const metrics = useNodeMetrics(uuid);
@@ -428,6 +430,7 @@ export function InstanceDetails({
           <Fragment key={moduleId}>{detailModules[moduleId]}</Fragment>
         ))}
       </div>
+      {portCheck}
     </>
   );
 }
