@@ -51,7 +51,9 @@ function isPrivateIpv4(value: string): boolean {
     (a === 100 && b >= 64 && b <= 127) ||
     (a === 169 && b === 254) ||
     (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && (b === 0 || b === 168)) ||
+    (a === 192 && b === 168) ||
+    (a === 192 && b === 0 && (c === 0 || c === 2)) ||
+    (a === 192 && b === 88 && c === 99) ||
     (a === 198 && (b === 18 || b === 19 || b === 51 && c === 100)) ||
     (a === 203 && b === 0 && c === 113)
   );
@@ -110,6 +112,7 @@ export function normalizePublicTarget(input: string): string {
     parsed.pathname !== "/" ||
     hostname.length > 253 ||
     !hostname.includes(".") ||
+    /^[0-9.]+$/.test(hostname) ||
     hostname.endsWith(".") ||
     hostname.split(".").some((label) => !label || label.length > 63 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label)) ||
     /\.(localhost|local|localdomain|internal|lan|home|test|invalid|example)$/.test(hostname)
