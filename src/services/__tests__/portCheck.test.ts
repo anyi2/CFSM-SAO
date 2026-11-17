@@ -34,6 +34,12 @@ describe("normalizePublicTarget", () => {
     "https://example.com",
     "example.com:443",
     "example.com/path",
+    "0177.0.0.1",
+    "001.1.1.1",
+    "2001:db8::1",
+    "2001:2::1",
+    "2002::1",
+    "3fff::1",
   ])("rejects non-public or malformed target %s", (target) => {
     expect(() => normalizePublicTarget(target)).toThrow();
   });
@@ -45,6 +51,10 @@ describe("normalizePublicTarget", () => {
   it("rejects private and loopback IPv6 addresses", () => {
     expect(() => normalizePublicTarget("::1")).toThrow();
     expect(() => normalizePublicTarget("fc00::1")).toThrow();
+  });
+
+  it("accepts a globally routable IPv6 address", () => {
+    expect(normalizePublicTarget("2606:4700:4700::1111")).toBe("2606:4700:4700::1111");
   });
 });
 

@@ -67,7 +67,31 @@ function isPrivateIpv6(value: string): boolean {
   if (/^(fc|fd|fe[89ab])/.test(normalized)) return true;
   if (normalized.startsWith("ff")) return true;
   const mapped = normalized.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
-  return Boolean(mapped && isPrivateIpv4(mapped[1]!));
+  if (mapped) return isPrivateIpv4(mapped[1]!);
+
+  // Accept only globally-routable unicast space (2000::/3), then exclude
+  // IANA special-purpose, documentation and transition ranges within it.
+  const halves = normalized.split("::");
+  if (halves.length > 2) return true;
+  const left = halves[0] ? halves[0].split(":") : [];
+  const right = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+  const missing = 8 - left.length - right.length;
+  if ((halves.length === 1 && missing !== 0) || (halves.length === 2 && missing < 1)) return true;
+  const segments = [...left, ...Array(Math.max(0, missing)).fill("0"), ...right];
+  if (segments.length !== 8 || segments.some((part) => !/^[0-9a-f]{1,4}$/.test(part))) return true;
+  const words = segments.map((part) => Number.parseInt(part, 16));
+  const first = words[0]!;
+  const second = words[1]!;
+  if (first < 0x2000 || first > 0x3fff) return true;
+  if (first === 0x2002 || first === 0x3fff) return true;
+  if (
+    first === 0x2001 &&
+    (second <= 0x0001 ||
+      second === 0x0002 ||
+      (second >= 0x0010 && second <= 0x002f) ||
+      second === 0x0db8)
+  ) return true;
+  return false;
 }
 
 /**
@@ -95,7 +119,9 @@ export function normalizePublicTarget(input: string): string {
   const ipv4Like = /^\d+(?:\.\d+){3}$/.test(host);
   if (ipv4Like) {
     const parts = host.split(".");
-    if (parts.some((part) => !/^\d{1,3}$/.test(part) || Number(part) > 255)) {
+    // Reject non-canonical octets such as 0177.0.0.1. Some URL and resolver
+    // stacks interpret leading-zero IPv4 forms as octal/legacy numeric addresses.
+    if (parts.some((part) => !/^(0|[1-9]\d{0,2})$/.test(part) || Number(part) > 255)) {
       throw new Error("IPv4 地址格式不正确");
     }
     if (isPrivateIpv4(host)) throw new Error("不允许检测本地、内网或保留 IPv4 地址");

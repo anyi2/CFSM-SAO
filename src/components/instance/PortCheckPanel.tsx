@@ -294,7 +294,7 @@ export function PortCheckPanel({ nodeName }: { nodeName?: string }) {
           <div className="flex max-w-xl items-start gap-2 text-[10px] leading-relaxed text-(--text-tertiary)">
             <Globe2 size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
             <span>
-              由 Check-Host.cc 全球探测节点执行。只在点击按钮时提交一次检测，不会定时自动扫描。
+              由 Check-Host.cc 全球探测节点执行。只在点击按钮时提交一次检测，不会定时自动扫描。域名由第三方节点自行解析，建议优先填写确认的公网 IP。
               {protocol === "udp" ? " UDP 无响应不代表端口一定关闭。" : " TCP 未连通也可能由防火墙或线路过滤导致。"}
             </span>
           </div>
