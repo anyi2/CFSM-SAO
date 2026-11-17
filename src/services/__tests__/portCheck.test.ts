@@ -123,12 +123,6 @@ describe("runPortCheck", () => {
             },
           },
         }));
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({
-        success: true,
-        uuid: "ca9f3340-1071-4e6d-9717-5fe16072741d",
-      }),
-    );
     vi.stubGlobal("fetch", fetchMock);
 
     const report = await runPortCheck({
