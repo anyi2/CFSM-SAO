@@ -104,13 +104,14 @@ describe("parsePortCheckRows", () => {
 describe("runPortCheck", () => {
   it("submits a single manual check and polls its report", async () => {
     const fetchMock = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(
+      .mockImplementationOnce(async () =>
         jsonResponse({
           success: true,
           uuid: "ca9f3340-1071-4e6d-9717-5fe16072741d",
         }),
       )
-      .mockResolvedValue(jsonResponse({
+      .mockImplementation(async () =>
+        jsonResponse({
           success: true,
           data: {
             "JP-TYO-Test": {
@@ -122,7 +123,8 @@ describe("runPortCheck", () => {
               checks: [{ status: 1, connectiontime: 12, target_ip: "1.1.1.1" }],
             },
           },
-        }));
+        }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     const report = await runPortCheck({
