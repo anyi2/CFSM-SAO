@@ -164,6 +164,9 @@ async function createCheck(provider, input) {
   }
 
   if (!nodeIds.length) throw new Error("请先获取节点并选择探测节点，避免意外消耗额度");
+  const providerNodes = await getNodes(provider);
+  const selectedNodes = providerNodes.filter((node) => nodeIds.includes(node.id));
+  const nodeMetadata = Object.fromEntries(selectedNodes.map((node) => [node.id, node]));
   if (provider === "boce") {
     const url = new URL(`https://api.boce.com/v3/task/create/${mode === "ping" ? "ping" : "tcping"}`);
     url.searchParams.set("key", process.env.BOCE_API_KEY);
@@ -171,7 +174,7 @@ async function createCheck(provider, input) {
     url.searchParams.set("host", mode === "ping" ? target : `${target}:${port}`);
     const result = await upstream(url);
     if (result.error_code !== 0 || !result.data?.id) throw new Error(result.error || "BOCE 创建任务失败");
-    return { provider, mode, target, port, taskId: String(result.data.id), reportUrl: "", nodes: {}, createdAt: Date.now() };
+    return { provider, mode, target, port, taskId: String(result.data.id), reportUrl: "", nodes: nodeMetadata, createdAt: Date.now() };
   }
 
   // TCPTest documents POST /tasks with type=ping|tcping, async task/results,
@@ -183,7 +186,7 @@ async function createCheck(provider, input) {
   });
   const taskId = result.id ?? result.task_id ?? result.data?.id;
   if (!taskId) throw new Error(result.error || "TCPTest 未返回任务 ID");
-  return { provider, mode, target, port, taskId: String(taskId), reportUrl: "", nodes: {}, createdAt: Date.now() };
+  return { provider, mode, target, port, taskId: String(taskId), reportUrl: "", nodes: nodeMetadata, createdAt: Date.now() };
 }
 
 async function getResult(provider, taskId, mode = "ping") {
