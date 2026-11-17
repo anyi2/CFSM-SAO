@@ -122,20 +122,22 @@ async function getNodes(provider) {
     url.searchParams.set("key", process.env.BOCE_API_KEY);
     // Omit area: BOCE documents mainland as the default area.
     const data = await upstream(url);
-    const rows = Array.isArray(data.data) ? data.data : Array.isArray(data.data?.list) ? data.data.list : data.data && typeof data.data === "object" ? Object.values(data.data).flatMap((value) => Array.isArray(value) ? value : []) : [];
+    const source = data.data?.list ?? data.data?.nodes ?? data.data;
+    const rows = Array.isArray(source) ? source : source && typeof source === "object" ? Object.entries(source).filter(([, value]) => value && typeof value === "object").map(([id, value]) => ({ id, ...value })) : [];
     return rows.map((node) => ({
       id: String(node.node_id ?? node.id ?? ""), name: String(node.node_name ?? node.name ?? ""),
       countryCode: "CN", country: "中国", city: String(node.city ?? node.ip_region ?? ""),
-      ip: "", asn: "", carrier: String(node.isp ?? node.carrier ?? ""),
+      ip: "", asn: "", carrier: String(node.isp ?? node.carrier ?? node.operator ?? ""),
       raw: node,
     })).filter((node) => node.id);
   }
   const data = await upstream("https://www.tcptest.cn/api/open/v1/nodes", { headers: tcptestHeaders() });
-  const rows = Array.isArray(data.nodes) ? data.nodes : Array.isArray(data.data) ? data.data : [];
+  const source = data.nodes ?? data.data?.nodes ?? data.data?.list ?? data.data;
+  const rows = Array.isArray(source) ? source : source && typeof source === "object" ? Object.entries(source).filter(([, value]) => value && typeof value === "object").map(([id, value]) => ({ id, ...value })) : [];
   return rows.map((node) => ({
     id: String(node.id ?? node.node_id ?? ""), name: String(node.name ?? node.node_name ?? ""),
     countryCode: String(node.country_code ?? node.countryCode ?? ""),
-    country: String(node.country ?? ""), city: String(node.city ?? ""),
+    country: String(node.country ?? ""), city: String(node.city ?? node.province ?? node.region ?? ""),
     ip: "", asn: String(node.asn ?? ""), carrier: String(node.isp ?? node.carrier ?? ""),
     raw: node,
   })).filter((node) => node.id);
