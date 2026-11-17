@@ -107,6 +107,16 @@ export async function getProbeProviders(config: ProbeProxyConfig, signal?: Abort
   );
 }
 
+export async function getProbeQuota(
+  config: ProbeProxyConfig,
+  provider: ProbeProviderId,
+  signal?: AbortSignal,
+): Promise<{ quota: unknown }> {
+  return proxyRequest<{ quota: unknown }>(
+    config, `/v1/providers/${provider}/quota`, {}, signal,
+  );
+}
+
 export async function getProbeNodes(
   config: ProbeProxyConfig,
   provider: ProbeProviderId,
