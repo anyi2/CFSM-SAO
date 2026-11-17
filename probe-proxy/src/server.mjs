@@ -5,9 +5,12 @@ const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || "127.0.0.1";
 const TOKEN = (process.env.PROBE_PROXY_TOKEN || "").trim();
 const ORIGINS = new Set((process.env.PROBE_ALLOWED_ORIGINS || "").split(",").map((v) => v.trim()).filter(Boolean));
-const MAX_NODES = Math.max(1, Math.min(20, Number(process.env.PROBE_MAX_NODES || 6)));
-const REQUEST_TIMEOUT = Math.max(3000, Math.min(60000, Number(process.env.PROBE_REQUEST_TIMEOUT_MS || 15000)));
-const RESULT_TTL = Math.max(60000, Number(process.env.PROBE_RESULT_TTL_MS || 900000));
+const configuredMaxNodes = Number(process.env.PROBE_MAX_NODES || 6);
+const configuredRequestTimeout = Number(process.env.PROBE_REQUEST_TIMEOUT_MS || 15000);
+const configuredResultTtl = Number(process.env.PROBE_RESULT_TTL_MS || 900000);
+const MAX_NODES = Number.isFinite(configuredMaxNodes) ? Math.max(1, Math.min(20, Math.trunc(configuredMaxNodes))) : 6;
+const REQUEST_TIMEOUT = Number.isFinite(configuredRequestTimeout) ? Math.max(3000, Math.min(60000, configuredRequestTimeout)) : 15000;
+const RESULT_TTL = Number.isFinite(configuredResultTtl) ? Math.max(60000, configuredResultTtl) : 900000;
 
 const PROVIDER_METADATA = {
   "check-host": {
@@ -259,13 +262,14 @@ async function getResult(provider, taskId, mode = "ping", task = null) {
   if (provider === "check-host") {
     const result = await upstream(`https://check-host.net/check-result/${encodeURIComponent(taskId)}`);
     if (result?.error) throw new HttpError(String(result.error), 502);
+    const resultMap = result && typeof result === "object" && !Array.isArray(result) ? result : {};
     const expectedNodes = task?.nodes && typeof task.nodes === "object" && !Array.isArray(task.nodes)
       ? Object.keys(task.nodes)
       : [];
-    const values = Object.values(result || {});
+    const values = Object.values(resultMap);
     const pending = values.length === 0 || values.some((value) => value === null) ||
-      expectedNodes.some((nodeId) => !Object.hasOwn(result, nodeId));
-    return { provider, taskId, pending, raw: result };
+      expectedNodes.some((nodeId) => !Object.hasOwn(resultMap, nodeId));
+    return { provider, taskId, pending, raw: resultMap };
   }
   if (provider === "boce") {
     const url = new URL(`https://api.boce.com/v3/task/${mode === "tcp" ? "tcping" : "ping"}/${encodeURIComponent(taskId)}`);
@@ -319,6 +323,7 @@ async function handler(req, res) {
       const input = await readBody(req);
       const provider = String(input.provider || "");
       if (!PROVIDERS.includes(provider)) throw new Error("未知检测平台");
+      requireProvider(provider);
       enforceSubmissionRate(req, provider, normalizeTarget(input.target), input.mode, input.port);
       const task = await createCheck(provider, input);
       const key = `${provider}:${task.taskId}`;
