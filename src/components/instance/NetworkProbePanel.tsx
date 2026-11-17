@@ -127,21 +127,36 @@ function rowsFromResult(task: ProbeTask, result: ProbeResult): ResultRow[] {
 
   if (task.provider === "boce") {
     const list = Array.isArray(raw.list) ? raw.list : [];
-    return list.map((entry, index) => {
+    const rows = list.map((entry, index) => {
       const item = asRecord(entry);
       const loss = finiteNumber(item.packet_loss);
       const latency = finiteNumber(item.round_trip_avg);
       const error = String(item.error || "");
-      const isFailure = Number(item.error_code) !== 0 && Boolean(error);
+      const errorCode = finiteNumber(item.error_code);
+      const isFailure = Boolean(error) || (errorCode != null && errorCode !== 0);
       return {
         id: `boce-${String(item.node_id ?? index)}`, provider: task.provider,
         node: String(item.node_name || item.node_id || `节点 ${index + 1}`),
         city: String(item.ip_region || ""), carrier: carrierLabel(String(item.ip_isp || "")),
-        status: isFailure ? "failed" : latency != null || (loss != null && loss < 100) ? "success" : "unknown",
+        status: isFailure ? "failed" as const : latency != null || (loss != null && loss < 100) ? "success" as const : "unknown" as const,
         latencyMs: latency, lossPercent: loss,
-        detail: error || (loss != null ? `丢包 ${loss}%` : "等待节点数据"),
+        detail: error || (errorCode != null && errorCode !== 0 ? `平台错误码 ${errorCode}` : loss != null ? `丢包 ${loss}%` : "等待节点数据"),
       };
     });
+    const returnedNodeIds = new Set(list.map((entry) => String(asRecord(entry).node_id ?? "")));
+    for (const [nodeId, metadataValue] of Object.entries(asRecord(task.nodes))) {
+      if (returnedNodeIds.has(nodeId)) continue;
+      const metadata = asRecord(metadataValue);
+      rows.push({
+        id: `boce-${nodeId}`, provider: task.provider,
+        node: String(metadata.name || nodeId),
+        city: String(metadata.city || ""), carrier: carrierLabel(String(metadata.carrier || "")),
+        status: result.pending ? "pending" : "unknown",
+        latencyMs: null, lossPercent: null,
+        detail: result.pending ? "等待平台返回节点数据" : "平台未返回该节点数据",
+      });
+    }
+    return rows;
   }
 
   const resultsContainer = asRecord(raw.results);
