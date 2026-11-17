@@ -110,8 +110,7 @@ describe("runPortCheck", () => {
           uuid: "ca9f3340-1071-4e6d-9717-5fe16072741d",
         }),
       )
-      .mockResolvedValueOnce(
-        jsonResponse({
+      .mockResolvedValue(jsonResponse({
           success: true,
           data: {
             "JP-TYO-Test": {
@@ -123,8 +122,13 @@ describe("runPortCheck", () => {
               checks: [{ status: 1, connectiontime: 12, target_ip: "1.1.1.1" }],
             },
           },
-        }),
-      );
+        }));
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        success: true,
+        uuid: "ca9f3340-1071-4e6d-9717-5fe16072741d",
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const report = await runPortCheck({
@@ -135,7 +139,7 @@ describe("runPortCheck", () => {
       timeout: 2_000,
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.check-host.cc/tcp");
     const request = fetchMock.mock.calls[0]?.[1];
     expect(JSON.parse(String(request?.body))).toMatchObject({
