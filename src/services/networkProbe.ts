@@ -52,16 +52,24 @@ const TOKEN_KEY = "cfsm_network_probe_proxy_token";
 
 export function getProbeProxyConfig(): ProbeProxyConfig {
   if (typeof window === "undefined") return { baseUrl: "", token: "" };
+  // Keep the proxy URL across visits, but keep its bearer secret only for the
+  // current browser session. Remove the legacy localStorage copy on upgrade.
+  const legacyToken = window.localStorage.getItem(TOKEN_KEY);
+  if (legacyToken) {
+    window.sessionStorage.setItem(TOKEN_KEY, legacyToken);
+    window.localStorage.removeItem(TOKEN_KEY);
+  }
   return {
     baseUrl: window.localStorage.getItem(BASE_KEY) || "",
-    token: window.localStorage.getItem(TOKEN_KEY) || "",
+    token: window.sessionStorage.getItem(TOKEN_KEY) || "",
   };
 }
 
 export function saveProbeProxyConfig(config: ProbeProxyConfig): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(BASE_KEY, config.baseUrl.trim().replace(/\/+$/, ""));
-  window.localStorage.setItem(TOKEN_KEY, config.token.trim());
+  window.sessionStorage.setItem(TOKEN_KEY, config.token.trim());
+  window.localStorage.removeItem(TOKEN_KEY);
 }
 
 function proxyUrl(config: ProbeProxyConfig, path: string): string {
