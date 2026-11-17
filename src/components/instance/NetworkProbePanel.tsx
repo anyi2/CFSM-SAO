@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity, AlertCircle, CheckCircle2, ChevronDown, CircleHelp, LoaderCircle,
   Network, RefreshCw, Save, ShieldCheck, XCircle,
@@ -161,6 +161,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
   const [proxyUrl, setProxyUrl] = useState(config.baseUrl);
   const [proxyToken, setProxyToken] = useState(config.token);
   const [target, setTarget] = useState("");
+  const targetTouchedRef = useRef(false);
   const [targetStatus, setTargetStatus] = useState("正在读取当前实例公网 IPv4…");
   const [mode, setMode] = useState<ProbeMode>("ping");
   const [portText, setPortText] = useState("443");
@@ -183,7 +184,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
       .then((ip) => {
         if (!active) return;
         if (ip) {
-          setTarget(ip);
+          if (!targetTouchedRef.current) setTarget(ip);
           setTargetStatus("已从当前实例的 CFSM 管理端记录读取公网 IPv4");
         } else {
           setTargetStatus("管理端未提供该实例的公网 IPv4，请手动填写");
@@ -196,7 +197,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
   }, [nodeUuid]);
 
   const selectedCount = useMemo(
-    () => PROVIDERS.reduce((total, provider) => total + (selected[provider.id]?.length || 0), 0),
+    () => PROVIDERS.reduce((total, provider) => total + (enabled[provider.id] ? (selected[provider.id]?.length || 0) : 0), 0),
     [selected],
   );
 
@@ -325,7 +326,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(120px,0.6fr)]">
           <label className="flex min-w-0 flex-col gap-1.5 text-[11px] font-semibold text-(--text-secondary)">
             目标公网 IPv4
-            <input autoComplete="off" spellCheck={false} inputMode="decimal" value={target} onChange={(event) => setTarget(event.target.value)} placeholder="自动读取当前实例，也可手动填写" className="min-h-10 rounded-xl border border-(--hairline) bg-(--surface-elev) px-3 text-[12px] font-mono font-normal text-(--text-primary)" />
+            <input autoComplete="off" spellCheck={false} inputMode="decimal" value={target} onChange={(event) => { targetTouchedRef.current = true; setTarget(event.target.value); }} placeholder="自动读取当前实例，也可手动填写" className="min-h-10 rounded-xl border border-(--hairline) bg-(--surface-elev) px-3 text-[12px] font-mono font-normal text-(--text-primary)" />
             <span className="text-[10px] font-normal text-(--text-tertiary)">{targetStatus}</span>
           </label>
           {mode === "tcp" && (
