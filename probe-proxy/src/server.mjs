@@ -213,15 +213,15 @@ function cleanupJobs() {
 }
 
 async function handler(req, res) {
-  if (!TOKEN) return json(res, 503, { error: "代理未配置 PROBE_PROXY_TOKEN" });
   if (!cors(req, res)) return json(res, 403, { error: "Origin not allowed" });
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  if (req.method === "GET" && url.pathname === "/health") return json(res, TOKEN ? 200 : 503, { ok: Boolean(TOKEN) });
+  if (!TOKEN) return json(res, 503, { error: "代理未配置 PROBE_PROXY_TOKEN" });
   const auth = req.headers.authorization || "";
   if (auth !== `Bearer ${TOKEN}`) return json(res, 401, { error: "Unauthorized" });
 
-  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   try {
-    if (req.method === "GET" && url.pathname === "/health") return json(res, 200, { ok: true });
     if (req.method === "GET" && url.pathname === "/v1/providers") {
       return json(res, 200, { providers: PROVIDERS.map((id) => ({ id, configured: providerReady(id) })) });
     }
