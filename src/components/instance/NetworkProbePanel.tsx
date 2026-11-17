@@ -231,9 +231,19 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
         )}
 
         {error && (
-          <div role="alert" className="flex items-start gap-2 rounded-xl border border-(--hairline) bg-(--surface-elev) px-3 py-2.5 text-[11px] text-(--text-primary)">
-            <ShieldAlert size={14} className="mt-0.5 shrink-0 text-(--status-offline)" />
-            <span>{error}</span>
+          <div role="alert" className="flex flex-col gap-2 rounded-xl border border-(--hairline) bg-(--surface-elev) px-3 py-2.5 text-[11px] text-(--text-primary)">
+            <div className="flex items-start gap-2">
+              <ShieldAlert size={14} className="mt-0.5 shrink-0 text-(--status-offline)" />
+              <span>{error}</span>
+            </div>
+            <a
+              href="https://api.globalping.io/v1/probes"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 pl-5 text-[10px] font-semibold text-(--accent-500) hover:underline"
+            >
+              测试 Globalping 接口 <ExternalLink size={11} />
+            </a>
           </div>
         )}
 
