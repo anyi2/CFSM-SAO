@@ -68,7 +68,7 @@ The theme keeps provider-specific node IDs separate. It must not pretend that no
 - [x] Check-Host.net node discovery and initial Ping/TCP adapters.
 - [x] Initial BOCE and TCPTest adapters (payload/result normalization still needs live account verification).
 - [x] Admin-only instance detail UI for separate ICMP and TCP modes.
-- [x] Best-effort current-instance public IPv4 lookup via authenticated CFSM admin server list; manual input fallback.
+- [ ] Validate current-instance public IPv4 lookup against a live CFSM Admin API response (the matching-record lookup and manual fallback are implemented; exact deployment payload still needs a live check).
 - [x] Free-first default and no-key Check-Host path.
 - [x] Paid provider disabled until credentials configured; explicit confirmation before metered requests.
 - [x] Actual node locations shown without filtering overseas Check-Host nodes into fake Mainland coverage.
