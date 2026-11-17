@@ -54,7 +54,7 @@ function rowsFromResult(task: ProbeTask, result: ProbeResult): ResultRow[] {
   if (task.provider === "check-host") {
     const nodeMeta = asRecord(task.nodes);
     for (const [nodeId, value] of Object.entries(raw)) {
-      const meta = asRecord(nodeMeta[nodeId]);
+      const meta = nodeMeta[nodeId];
       const location = Array.isArray(meta) ? meta : [];
       const country = String(location[1] || "");
       const city = String(location[2] || "");
@@ -107,17 +107,24 @@ function rowsFromResult(task: ProbeTask, result: ProbeResult): ResultRow[] {
     });
   }
 
-  const candidates = Array.isArray(raw.results) ? raw.results : Array.isArray(raw.data) ? raw.data : [];
+  const resultsContainer = asRecord(raw.results);
+  const candidateSource = Array.isArray(raw.results) ? raw.results
+    : Array.isArray(resultsContainer.results) ? resultsContainer.results
+    : Array.isArray(resultsContainer.data) ? resultsContainer.data
+    : Array.isArray(resultsContainer.nodes) ? resultsContainer.nodes
+    : Array.isArray(raw.data) ? raw.data
+    : [];
+  const candidates = candidateSource.length ? candidateSource : Object.entries(resultsContainer).map(([nodeId, value]) => ({ node_id: nodeId, ...asRecord(value) }));
   return candidates.map((entry, index) => {
     const item = asRecord(entry);
-    const latency = finiteNumber(item.avg_ms ?? item.latency_ms ?? item.rtt_ms ?? item.avg);
-    const loss = finiteNumber(item.packet_loss ?? item.loss_percent ?? item.loss);
+    const latency = finiteNumber(item.avg_ms ?? item.avg_rtt_ms ?? item.rtt_avg_ms ?? item.latency_ms ?? item.rtt_ms ?? item.avg);
+    const loss = finiteNumber(item.packet_loss ?? item.loss_percent ?? item.packet_loss_percent ?? item.loss);
     const nodeName = String(item.node_name || item.name || item.node_id || `节点 ${index + 1}`);
     const failed = item.success === false || item.status === "failed" || item.status === "error";
     return {
       id: `tcptest-${String(item.node_id ?? index)}`, provider: task.provider,
-      node: nodeName, city: String(item.city || item.region || ""),
-      carrier: carrierLabel(String(item.isp || item.carrier || "")),
+      node: nodeName, city: String(item.city || item.province || item.region || asRecord(task.nodes[String(item.node_id)]).city || ""),
+      carrier: carrierLabel(String(item.isp || item.carrier || asRecord(task.nodes[String(item.node_id)]).carrier || "")),
       status: failed ? "failed" : latency != null || item.success === true ? "success" : "unknown",
       latencyMs: latency, lossPercent: loss, detail: String(item.error || item.message || ""),
     };
