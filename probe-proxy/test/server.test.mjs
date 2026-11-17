@@ -66,3 +66,46 @@ test("private targets are rejected before dispatch", async () => {
   assert.equal(response.status, 400);
   assert.match((await response.json()).error, /公网 IPv4/);
 });
+
+test("provider metadata defaults to the no-key public Check-Host API", async () => {
+  const response = await fetch(`${origin}/v1/providers`, {
+    headers: { authorization: "Bearer test-secret-token" },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  const providers = Object.fromEntries(body.providers.map((provider) => [provider.id, provider]));
+  assert.equal(providers["check-host"].configured, true);
+  assert.equal(providers["check-host"].requiresApiKey, false);
+  assert.equal(providers.tcptest.configured, false);
+  assert.equal(providers.tcptest.requiresApiKey, true);
+  assert.equal(providers.boce.configured, false);
+  assert.equal(providers.boce.requiresApiKey, true);
+});
+
+test("Check-Host checks require an explicit node selection", async () => {
+  const response = await fetch(`${origin}/v1/checks`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer test-secret-token",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ provider: "check-host", mode: "ping", target: "8.8.8.8", nodeIds: [] }),
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /选择.*探测节点/);
+});
+
+test("provider tasks are rate-limited per target", async () => {
+  const send = () => fetch(`${origin}/v1/checks`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer test-secret-token",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ provider: "check-host", mode: "ping", target: "9.9.9.9", nodeIds: [] }),
+  });
+  const first = await send();
+  const second = await send();
+  assert.equal(first.status, 400);
+  assert.equal(second.status, 429);
+});
