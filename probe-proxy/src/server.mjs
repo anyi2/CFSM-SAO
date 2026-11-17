@@ -241,6 +241,11 @@ async function handler(req, res) {
     if (req.method === "GET" && url.pathname === "/v1/providers") {
       return json(res, 200, { providers: PROVIDERS.map((id) => ({ id, configured: providerReady(id) })) });
     }
+    const quotaMatch = url.pathname.match(/^\/v1\/providers\/([a-z-]+)\/quota$/);
+    if (req.method === "GET" && quotaMatch) {
+      const quota = await getQuota(quotaMatch[1]);
+      return json(res, 200, { provider: quotaMatch[1], quota });
+    }
     const nodesMatch = url.pathname.match(/^\/v1\/providers\/([a-z-]+)\/nodes$/);
     if (req.method === "GET" && nodesMatch) {
       const nodes = await getNodes(nodesMatch[1]);
