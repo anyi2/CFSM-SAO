@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getServerApiBase } from "@/services/api";
 import { cfsmPost } from "@/services/cfsm/http";
 
 export type ProbeProviderId = "tcptest" | "boce" | "check-host";
@@ -189,8 +190,29 @@ function isPublicIpv4(value: unknown): value is string {
     (a === 203 && b === 0 && c === 113));
 }
 
+function findPublicIpv4InRecord(payload: unknown, depth = 0): string | null {
+  if (depth > 10 || payload == null || typeof payload !== "object") return null;
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const found = findPublicIpv4InRecord(item, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  if (isPublicIpv4(record.ip_v4)) return record.ip_v4.trim();
+
+  for (const [key, value] of Object.entries(record)) {
+    if (key === "ip_v4") continue;
+    const found = findPublicIpv4InRecord(value, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
 function findServerIpv4(payload: unknown, uuid: string, depth = 0): string | null {
-  if (depth > 8 || payload == null || typeof payload !== "object") return null;
+  if (depth > 10 || payload == null || typeof payload !== "object") return null;
   if (Array.isArray(payload)) {
     for (const item of payload) {
       const found = findServerIpv4(item, uuid, depth + 1);
@@ -198,9 +220,15 @@ function findServerIpv4(payload: unknown, uuid: string, depth = 0): string | nul
     }
     return null;
   }
+
   const record = payload as Record<string, unknown>;
   const recordUuid = record.uuid ?? record.server_uuid ?? record.id;
-  if (String(recordUuid ?? "") === uuid && isPublicIpv4(record.ip_v4)) return record.ip_v4.trim();
+  if (String(recordUuid ?? "") === uuid) {
+    // Admin list may expose the latest metrics directly or inside a nested
+    // metrics/report object. Search only this matched server subtree.
+    return findPublicIpv4InRecord(record);
+  }
+
   for (const [key, value] of Object.entries(record)) {
     if (key === "ip_v4") continue;
     const found = findServerIpv4(value, uuid, depth + 1);
@@ -208,13 +236,17 @@ function findServerIpv4(payload: unknown, uuid: string, depth = 0): string | nul
   }
   return null;
 }
-
 /**
  * Read the selected CFSM server's own public IPv4 from the authenticated admin
  * server list. Never substitute the panel host IP, browser IP, or an unrelated node.
  */
 export async function getCurrentNodePublicIpv4(uuid: string, signal?: AbortSignal): Promise<string | null> {
   if (!uuid) return null;
-  const response = await cfsmPost("/admin/api", { action: "list" }, z.unknown(), { signal, timeout: 15_000 });
+  const response = await cfsmPost(
+    "/admin/api",
+    { action: "list", refresh: true },
+    z.unknown(),
+    { signal, timeout: 15_000, base: getServerApiBase(uuid) },
+  );
   return findServerIpv4(response, uuid);
 }
