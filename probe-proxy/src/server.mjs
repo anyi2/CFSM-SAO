@@ -250,12 +250,19 @@ async function createCheck(provider, input) {
   return { provider, mode, target, port, taskId: String(taskId), reportUrl: "", nodes: nodeMetadata, createdAt: Date.now() };
 }
 
-async function getResult(provider, taskId, mode = "ping") {
+async function getResult(provider, taskId, mode = "ping", task = null) {
   requireProvider(provider);
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(taskId)) throw new Error("任务 ID 格式不正确");
   if (provider === "check-host") {
     const result = await upstream(`https://check-host.net/check-result/${encodeURIComponent(taskId)}`);
-    return { provider, taskId, pending: Object.values(result).some((value) => value === null), raw: result };
+    if (result?.error) throw new HttpError(String(result.error), 502);
+    const expectedNodes = task?.nodes && typeof task.nodes === "object" && !Array.isArray(task.nodes)
+      ? Object.keys(task.nodes)
+      : [];
+    const values = Object.values(result || {});
+    const pending = values.length === 0 || values.some((value) => value === null) ||
+      expectedNodes.some((nodeId) => !Object.hasOwn(result, nodeId));
+    return { provider, taskId, pending, raw: result };
   }
   if (provider === "boce") {
     const url = new URL(`https://api.boce.com/v3/task/${mode === "tcp" ? "tcping" : "ping"}/${encodeURIComponent(taskId)}`);
@@ -321,7 +328,7 @@ async function handler(req, res) {
       const [, provider, taskId] = resultMatch;
       const task = jobs.get(`${provider}:${taskId}`);
       if (!task) return json(res, 404, { error: "任务不存在或代理重启后任务记录已过期" });
-      const result = await getResult(provider, taskId, task.mode);
+      const result = await getResult(provider, taskId, task.mode, task);
       return json(res, 200, { ...task, ...result });
     }
     return json(res, 404, { error: "Not found" });
