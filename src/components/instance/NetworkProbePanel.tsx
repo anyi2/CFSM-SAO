@@ -11,8 +11,11 @@ import {
   getCurrentNodePublicIpv4,
   getGlobalpingMeasurement,
   getGlobalpingProbes,
+  getGlobalpingRateLimit,
+  GlobalpingApiError,
   isPublicIpv4,
   parseGlobalpingMeasurement,
+  type GlobalpingRateLimitSnapshot,
   type GlobalpingResultRow,
   type NetworkProbeProtocol,
   type ProbeCoverage,
@@ -44,6 +47,7 @@ interface StartedMeasurement {
   id?: string;
   probesCount: number;
   state: ProtocolResultState;
+  errorCause?: unknown;
 }
 
 function createProtocolResults(status: ProtocolRunStatus = "idle"): ProtocolResults {
@@ -139,6 +143,31 @@ function ProtocolResultCell({
   );
 }
 
+function CompactProtocolResult({ protocol, state, row }: {
+  protocol: NetworkProbeProtocol;
+  state: ProtocolResultState;
+  row?: GlobalpingResultRow;
+}) {
+  if (!row) {
+    const label = state.status === "running" ? "检测中…" : state.status === "error" ? "任务失败" : state.status === "timeout" ? "等待超时" : state.status === "complete" ? "无结果" : "—";
+    return (
+      <div className="min-w-0 rounded-lg bg-(--surface-elev) p-2">
+        <div className="text-[9px] font-bold text-(--text-secondary)">{protocol}</div>
+        <div className="mt-1 text-[10px] text-(--text-tertiary)">{label}</div>
+        {state.error && <div className="mt-1 break-words text-[9px] text-(--status-offline)">{state.error}</div>}
+      </div>
+    );
+  }
+  return (
+    <div className="min-w-0 rounded-lg bg-(--surface-elev) p-2">
+      <div className="text-[9px] font-bold text-(--text-secondary)">{protocol}</div>
+      <div className="mt-1 flex items-center gap-1 text-[10px] font-medium text-(--text-primary)"><StatusIcon status={row.status} /><span className="truncate">{statusLabel(row.status, protocol)}</span></div>
+      <div className="mt-1 font-mono text-[11px] text-(--text-primary)">{row.latencyMs == null ? "—" : row.latencyMs.toFixed(1) + " ms"}</div>
+      <div className="mt-1 truncate text-[9px] text-(--text-tertiary)" title={[row.probeType, row.network, row.city].filter(Boolean).join(" · ")}>{[row.probeType, row.network || row.city].filter(Boolean).join(" · ") || "探针信息未知"}</div>
+      {protocol === "UDP" && <div className="mt-1 text-[9px] leading-relaxed text-(--text-tertiary)">{row.detail}</div>}
+    </div>
+  );
+}
 export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; nodeUuid: string }) {
   const [target, setTarget] = useState("");
   const [targetStatus, setTargetStatus] = useState("正在读取当前实例公网 IPv4…");
@@ -146,11 +175,27 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
   const [coverage, setCoverage] = useState<ProbeCoverage[] | null>(null);
   const [protocolResults, setProtocolResults] = useState<ProtocolResults>(() => createProtocolResults());
   const [probeCount, setProbeCount] = useState<number | null>(null);
+  const [rateLimit, setRateLimit] = useState<GlobalpingRateLimitSnapshot | null>(null);
+  const [quotaLoading, setQuotaLoading] = useState(true);
+  const [quotaError, setQuotaError] = useState("");
   const [statusText, setStatusText] = useState("");
   const [error, setError] = useState("");
   const [running, setRunning] = useState(false);
   const targetTouchedRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getGlobalpingRateLimit()
+      .then((snapshot) => {
+        if (!active) return;
+        setRateLimit(snapshot);
+        setQuotaError("");
+      })
+      .catch(() => { if (active) setQuotaError("额度信息暂时无法读取，可手动刷新"); })
+      .finally(() => { if (active) setQuotaLoading(false); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -186,7 +231,6 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
       setError("TCP / UDP 共用的目标端口必须是 1–65535 之间的整数。");
       return;
     }
-
     const controller = new AbortController();
     abortRef.current = controller;
     setRunning(true);
@@ -195,140 +239,96 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
     setProtocolResults(createProtocolResults("running"));
     setProbeCount(null);
     setStatusText("正在读取 Globalping 当前在线探针…");
-
+    const applyRateLimit = (snapshot?: GlobalpingRateLimitSnapshot) => {
+      if (!snapshot) return;
+      setRateLimit((previous) => ({ ...snapshot, type: previous?.type ?? snapshot.type }));
+      setQuotaError("");
+    };
+    let probes: Awaited<ReturnType<typeof getGlobalpingProbes>> = [];
+    const startMeasurement = async (protocol: NetworkProbeProtocol, reuseProbeMeasurementId?: string): Promise<StartedMeasurement> => {
+      try {
+        const request = buildGlobalpingMeasurementRequest(ip, port, probes, protocol, reuseProbeMeasurementId);
+        const task = await createGlobalpingMeasurement(request, controller.signal);
+        applyRateLimit(task.rateLimit);
+        return { protocol, id: task.id, probesCount: task.probesCount, state: { rows: [], status: "running" } };
+      } catch (caught) {
+        if (caught instanceof GlobalpingApiError) applyRateLimit(caught.rateLimit);
+        return { protocol, probesCount: 0, errorCause: caught, state: { rows: [], status: "error", error: caught instanceof Error ? caught.message : "任务提交失败" } };
+      }
+    };
     try {
-      const probes = await getGlobalpingProbes(controller.signal);
+      probes = await getGlobalpingProbes(controller.signal);
       if (controller.signal.aborted) return;
       setCoverage(getCarrierProbeCoverage(probes));
-
-      // Globalping accepts one protocol per measurement. Submit the three
-      // measurements together from this single user action.
-      const started: StartedMeasurement[] = await Promise.all(
-        PROTOCOLS.map(async (protocol): Promise<StartedMeasurement> => {
-          try {
-            const request = buildGlobalpingMeasurementRequest(ip, port, probes, protocol);
-            const task = await createGlobalpingMeasurement(request, controller.signal);
-            return {
-              protocol,
-              id: task.id,
-              probesCount: task.probesCount,
-              state: { rows: [], status: "running" },
-            };
-          } catch (caught) {
-            return {
-              protocol,
-              probesCount: 0,
-              state: {
-                rows: [],
-                status: "error",
-                error: caught instanceof Error ? caught.message : "任务提交失败",
-              },
-            };
-          }
-        }),
-      );
+      setStatusText("正在建立基准探针组（ICMP）…");
+      const baseline = await startMeasurement("ICMP");
       if (controller.signal.aborted) return;
-
+      const started: StartedMeasurement[] = [baseline];
+      if (baseline.id) {
+        setStatusText("基准探针组已建立 · TCP / UDP 正在复用同一组探针…");
+        const next = await Promise.all([startMeasurement("TCP", baseline.id), startMeasurement("UDP", baseline.id)]);
+        started.push(...next);
+      } else {
+        const rateLimited = baseline.errorCause instanceof GlobalpingApiError && baseline.errorCause.status === 429;
+        if (rateLimited) {
+          for (const protocol of ["TCP", "UDP"] as const) {
+            started.push({ protocol, probesCount: 0, state: { rows: [], status: "error", error: baseline.state.error } });
+          }
+        } else {
+          setStatusText("ICMP 基准任务未建立 · TCP / UDP 将尝试独立选点…");
+          const next = await Promise.all([startMeasurement("TCP"), startMeasurement("UDP")]);
+          started.push(...next);
+        }
+      }
+      if (controller.signal.aborted) return;
       const startedResults = createProtocolResults();
       for (const run of started) startedResults[run.protocol] = run.state;
       setProtocolResults(startedResults);
-
+      void getGlobalpingRateLimit().then(applyRateLimit).catch(() => undefined);
       const activeRuns = started.filter((run) => run.id);
       const totalProbeCount = started.reduce((sum, run) => sum + run.probesCount, 0);
       setProbeCount(totalProbeCount);
-
       if (activeRuns.length === 0) {
         setStatusText("ICMP、TCP、UDP 三项任务均未能提交，请查看各列错误信息。");
         return;
       }
-
-      const plannedCount = activeRuns.reduce((sum, run) => {
-        const regionCount = buildGlobalpingMeasurementRequest(ip, port, probes, run.protocol).locations.length;
-        return sum + regionCount;
-      }, 0);
-      setStatusText(
-        "三协议任务已提交 · 实际分配 " + totalProbeCount +
-        " 个探针（计划最多 " + plannedCount + " 次探针测量），正在汇总结果…",
-      );
-
-      const currentRuns = new Map<NetworkProbeProtocol, StartedMeasurement>(
-        started.map((run) => [run.protocol, run]),
-      );
-
-      for (let attempt = 0; attempt < 16; attempt += 1) {
+      const locationCount = buildGlobalpingMeasurementRequest(ip, port, probes, "ICMP").locations.length;
+      setStatusText("三协议任务已提交 · 实际分配 " + totalProbeCount + " 个探针（计划最多 " + (locationCount * activeRuns.length) + " 次探针测试），正在汇总结果…");
+      const currentRuns = new Map<NetworkProbeProtocol, StartedMeasurement>(started.map((run) => [run.protocol, run]));
+      // A one-second wait between result requests stays below the API 2 req/s per-measurement ceiling.
+      // 45 rounds allow the documented 30-second probe timeout plus final result delivery.
+      for (let attempt = 0; attempt < 45; attempt += 1) {
         if (controller.signal.aborted) return;
-        if (attempt > 0) await wait(2000);
-
+        if (attempt > 0) await wait(1000);
         const pollingRuns = [...currentRuns.values()].filter((run) => run.id && run.state.status === "running");
         if (!pollingRuns.length) break;
-
-        const updates = await Promise.all(
-          pollingRuns.map(async (run) => {
-            try {
-              const measurement = await getGlobalpingMeasurement(run.id!, controller.signal);
-              const rows = parseGlobalpingMeasurement(measurement, run.protocol);
-              return {
-                protocol: run.protocol,
-                state: {
-                  rows,
-                  status: measurement.status === "finished" ? "complete" as const : "running" as const,
-                },
-              };
-            } catch (caught) {
-              return {
-                protocol: run.protocol,
-                state: {
-                  rows: run.state.rows,
-                  status: "error" as const,
-                  error: caught instanceof Error ? caught.message : "读取检测结果失败",
-                },
-              };
-            }
-          }),
-        );
+        const updates = await Promise.all(pollingRuns.map(async (run) => {
+          try {
+            const measurement = await getGlobalpingMeasurement(run.id!, controller.signal);
+            return { protocol: run.protocol, state: { rows: parseGlobalpingMeasurement(measurement, run.protocol), status: measurement.status === "in-progress" ? "running" as const : "complete" as const } };
+          } catch (caught) {
+            if (caught instanceof GlobalpingApiError) applyRateLimit(caught.rateLimit);
+            return { protocol: run.protocol, state: { rows: run.state.rows, status: "error" as const, error: caught instanceof Error ? caught.message : "读取检测结果失败" } };
+          }
+        }));
         if (controller.signal.aborted) return;
-
-        for (const update of updates) {
-          const run = currentRuns.get(update.protocol);
-          if (run) run.state = update.state;
-        }
-        setProtocolResults((previous) => {
-          const next = { ...previous };
-          for (const update of updates) next[update.protocol] = update.state;
-          return next;
-        });
-
-        const finishedCount = [...currentRuns.values()].filter((run) =>
-          run.state.status === "complete" || run.state.status === "error"
-        ).length;
+        for (const update of updates) { const run = currentRuns.get(update.protocol); if (run) run.state = update.state; }
+        setProtocolResults((previous) => { const next = { ...previous }; for (const update of updates) next[update.protocol] = update.state; return next; });
+        const finishedCount = [...currentRuns.values()].filter((run) => run.state.status === "complete" || run.state.status === "error").length;
         const runningCount = 3 - finishedCount;
-        setStatusText(
-          "结果汇总中 · 已完成 " + finishedCount + " / 3 项协议" +
-          (runningCount > 0 ? " · 仍有 " + runningCount + " 项检测中" : ""),
-        );
+        setStatusText("结果汇总中 · 已完成 " + finishedCount + " / 3 项协议" + (runningCount > 0 ? " · 仍有 " + runningCount + " 项检测中" : ""));
       }
-
       if (controller.signal.aborted) return;
-      for (const run of currentRuns.values()) {
-        if (run.state.status === "running") {
-          run.state = { ...run.state, status: "timeout" };
-        }
-      }
-      setProtocolResults(Object.fromEntries(
-        [...currentRuns.entries()].map(([protocol, run]) => [protocol, run.state]),
-      ) as ProtocolResults);
-
+      for (const run of currentRuns.values()) { if (run.state.status === "running") run.state = { ...run.state, status: "timeout" }; }
+      setProtocolResults(Object.fromEntries([...currentRuns.entries()].map(([protocol, run]) => [protocol, run.state])) as ProtocolResults);
       const finalRuns = [...currentRuns.values()];
       const completed = finalRuns.filter((run) => run.state.status === "complete").length;
       const failed = finalRuns.filter((run) => run.state.status === "error").length;
       const timedOut = finalRuns.filter((run) => run.state.status === "timeout").length;
-      setStatusText(
-        "三协议检测结束 · 完成 " + completed + " 项" +
-        (failed ? " · 失败 " + failed + " 项" : "") +
-        (timedOut ? " · 等待超时 " + timedOut + " 项" : ""),
-      );
+      setStatusText("三协议检测结束 · 完成 " + completed + " 项" + (failed ? " · 失败 " + failed + " 项" : "") + (timedOut ? " · 等待超时 " + timedOut + " 项" : ""));
     } catch (caught) {
       if (controller.signal.aborted) return;
+      if (caught instanceof GlobalpingApiError) applyRateLimit(caught.rateLimit);
       setError(caught instanceof Error ? caught.message : "网络检测失败，请稍后重试。");
       setStatusText("");
     } finally {
@@ -402,7 +402,28 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
 
         <div className="flex items-start gap-2 rounded-xl border border-(--hairline) bg-(--surface-elev) px-3 py-2.5 text-[10px] leading-relaxed text-(--text-tertiary)">
           <CircleHelp size={13} className="mt-0.5 shrink-0" />
-          <span>一次点击并行提交三种协议，结果在同一张表中横向对比。每种协议最多使用电信、联通、移动、日本、香港、美国各一个探针；最多 18 次探针测量。大陆优先家庭/企业宽带探针，没有时回退同 ASN 其他探针并标注类型。仅手动触发，不进行后台巡检。</span>
+          <span>先由 ICMP 建立基准探针组，TCP / UDP 复用同一组探针，便于横向比较；若基准任务失败，TCP / UDP 会独立尝试。每种协议最多覆盖电信、联通、移动、日本、香港、美国各一个探针，三项合计最多 18 次探针测试。仅手动触发，不进行后台巡检。</span>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-(--hairline) bg-(--surface-elev) px-3 py-2.5">
+          <div className="min-w-0">
+            <div className="text-[10px] font-semibold text-(--text-secondary)">Globalping API 检测额度</div>
+            <div className={["mt-1 text-[10px]", rateLimit?.remaining === 0 ? "text-(--status-offline)" : "text-(--text-tertiary)"].join(" ")}>
+              {rateLimit
+                ? "剩余探针测试 " + rateLimit.remaining + " / " + rateLimit.limit + " 次 · " + (rateLimit.type === "ip" ? "按当前出口 IP 共享" : "账户额度") + " · 约 " + rateLimit.resetSeconds + " 秒后重置"
+                : quotaLoading ? "正在读取当前额度…" : quotaError || "额度信息暂不可用"}
+              {rateLimit?.creditsRemaining !== undefined ? " · 额外积分 " + rateLimit.creditsRemaining : ""}
+            </div>
+          </div>
+          <button type="button" onClick={async () => {
+            setQuotaLoading(true);
+            setQuotaError("");
+            try { setRateLimit(await getGlobalpingRateLimit()); }
+            catch { setQuotaError("额度信息暂时无法读取"); }
+            finally { setQuotaLoading(false); }
+          }} disabled={quotaLoading} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-(--hairline) px-2.5 py-1.5 text-[10px] font-semibold text-(--text-secondary) disabled:opacity-50">
+            <RefreshCw size={11} className={quotaLoading ? "animate-spin" : ""} />刷新额度
+          </button>
         </div>
 
         {coverage && (
@@ -436,7 +457,23 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
         )}
 
         {(resultCount > 0 || running || PROTOCOLS.some((protocol) => protocolResults[protocol].status === "error" || protocolResults[protocol].status === "timeout")) && (
-          <div className="overflow-x-auto rounded-xl border border-(--hairline)">
+          <>
+            <div className="flex flex-col gap-2 md:hidden">
+              {LOCATION_ROWS.map((location) => (
+                <section key={location.id} className="rounded-xl border border-(--hairline) p-2.5">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold text-(--text-primary)">{location.name}</span>
+                    <span className="text-[9px] text-(--text-tertiary)">{location.meta}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {PROTOCOLS.map((protocol) => (
+                      <CompactProtocolResult key={protocol} protocol={protocol} state={protocolResults[protocol]} row={protocolResults[protocol].rows.find((item) => item.id === location.id)} />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+            <div className="hidden overflow-x-auto rounded-xl border border-(--hairline) md:block">
             <table className="w-full min-w-[760px] text-left text-[10px]">
               <thead className="bg-(--surface-elev) text-(--text-tertiary)">
                 <tr>
@@ -465,7 +502,8 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-(--hairline) pt-3">
