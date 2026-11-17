@@ -108,17 +108,20 @@ function rowsFromResult(task: ProbeTask, result: ProbeResult): ResultRow[] {
   }
 
   const resultsContainer = asRecord(raw.results);
+  const nestedResults = asRecord(resultsContainer.data);
   const candidateSource = Array.isArray(raw.results) ? raw.results
     : Array.isArray(resultsContainer.results) ? resultsContainer.results
     : Array.isArray(resultsContainer.data) ? resultsContainer.data
     : Array.isArray(resultsContainer.nodes) ? resultsContainer.nodes
+    : Array.isArray(resultsContainer.items) ? resultsContainer.items
+    : Array.isArray(nestedResults.results) ? nestedResults.results
     : Array.isArray(raw.data) ? raw.data
     : [];
-  const candidates = candidateSource.length ? candidateSource : Object.entries(resultsContainer).map(([nodeId, value]) => ({ node_id: nodeId, ...asRecord(value) }));
+  const candidates = candidateSource.length ? candidateSource : Object.entries(resultsContainer).filter(([, value]) => value && typeof value === "object").map(([nodeId, value]) => ({ node_id: nodeId, ...asRecord(value) }));
   return candidates.map((entry, index) => {
     const item = asRecord(entry);
-    const latency = finiteNumber(item.avg_ms ?? item.avg_rtt_ms ?? item.rtt_avg_ms ?? item.latency_ms ?? item.rtt_ms ?? item.avg);
-    const loss = finiteNumber(item.packet_loss ?? item.loss_percent ?? item.packet_loss_percent ?? item.loss);
+    const latency = finiteNumber(item.avg_ms ?? item.average_ms ?? item.avg_rtt_ms ?? item.rtt_avg_ms ?? item.latency_ms ?? item.rtt_ms ?? item.avg ?? item.average ?? item.time_ms);
+    const loss = finiteNumber(item.packet_loss ?? item.loss_percent ?? item.packet_loss_percent ?? item.loss_rate ?? item.loss);
     const nodeName = String(item.node_name || item.name || item.node_id || `节点 ${index + 1}`);
     const failed = item.success === false || item.status === "failed" || item.status === "error";
     return {
@@ -218,7 +221,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
       const entries = await Promise.all(PROVIDERS.map(async (provider) => {
         try {
           const list = await getProbeNodes(nextConfig, provider.id);
-          const mainland = list.filter((node) => node.countryCode.toUpperCase() === "CN" || node.country === "中国");
+          const mainland = list.filter((node) => node.countryCode.toUpperCase() === "CN" || ["中国", "china", "cn"].includes(node.country.trim().toLowerCase()));
           return [provider.id, mainland] as const;
         } catch (caught) {
           setProviderErrors((current) => ({ ...current, [provider.id]: caught instanceof Error ? caught.message : "节点获取失败" }));
