@@ -90,7 +90,8 @@ async function upstream(url, init = {}) {
     return payload;
   } catch (error) {
     if (error?.name === "AbortError") throw new HttpError("第三方服务请求超时", 504);
-    throw error;
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(error instanceof Error ? error.message : "第三方服务网络不可达", 502);
   } finally {
     clearTimeout(timer);
   }
