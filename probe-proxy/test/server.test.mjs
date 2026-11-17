@@ -82,6 +82,18 @@ test("provider metadata defaults to the no-key public Check-Host API", async () 
   assert.equal(providers.boce.requiresApiKey, true);
 });
 
+test("metered providers do not expose node or quota requests without keys", async () => {
+  for (const provider of ["tcptest", "boce"]) {
+    for (const resource of ["nodes", "quota"]) {
+      const response = await fetch(`${origin}/v1/providers/${provider}/${resource}`, {
+        headers: { authorization: "Bearer test-secret-token" },
+      });
+      assert.equal(response.status, 503);
+      assert.match((await response.json()).error, /API Key/);
+    }
+  }
+});
+
 test("Check-Host checks require an explicit node selection", async () => {
   const response = await fetch(`${origin}/v1/checks`, {
     method: "POST",
