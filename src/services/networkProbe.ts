@@ -321,11 +321,13 @@ export function parseGlobalpingMeasurement(payload: Record<string, unknown>): Gl
     const pending = resultStatus === "in-progress";
     const status: GlobalpingResultRow["status"] = pending
       ? "pending"
-      : samples.length > 0 || latency !== null
-        ? rejected ? "rejected" : "success"
-        : resultStatus === "finished" || resultStatus === "failed" || resultStatus === "offline"
-          ? "failed"
-          : "unknown";
+      : rejected
+        ? "rejected"
+        : samples.length > 0 || latency !== null
+          ? "success"
+          : resultStatus === "finished" || resultStatus === "failed" || resultStatus === "offline"
+            ? "failed"
+            : "unknown";
     const city = String(probe.city || "");
     const country = String(probe.country || "");
     const network = String(probe.network || "");
