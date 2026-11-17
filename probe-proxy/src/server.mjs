@@ -12,7 +12,11 @@ const RESULT_TTL = Math.max(60000, Number(process.env.PROBE_RESULT_TTL_MS || 900
 const PROVIDERS = ["tcptest", "boce", "check-host"];
 const jobs = new Map();
 
-class HttpError extends Error {\n  constructor(message, status) { super(message); this.status = status; }\n}\n\nfunction json(res, status, body, headers = {}) {
+class HttpError extends Error {
+  constructor(message, status) { super(message); this.status = status; }
+}
+
+function json(res, status, body, headers = {}) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers });
   res.end(JSON.stringify(body));
 }
