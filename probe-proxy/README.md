@@ -23,7 +23,7 @@ The service binds to `127.0.0.1` by default. Put it behind an HTTPS reverse prox
 
 - `GET /health`
 - `GET /v1/providers`
-- `GET /v1/providers/:provider/nodes`
+- `GET /v1/providers/:provider/nodes`\n- `GET /v1/providers/:provider/quota` (TCPTest exposes quota; BOCE and Check-Host.net currently return a documented-unavailable notice)
 - `POST /v1/checks` with `{ "provider":"check-host|boce|tcptest", "mode":"ping|tcp", "target":"public-ip-or-domain", "port":443, "nodeIds":["..."], "count":4 }`
 - `GET /v1/checks/:provider/:taskId`
 
