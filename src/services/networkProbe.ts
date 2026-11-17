@@ -222,7 +222,12 @@ async function globalpingRequest<T>(
     });
   } catch (error) {
     if (signal?.aborted) throw error;
-    throw new Error("无法连接 Globalping API，请检查浏览器网络后重试。");
+    const reason = error instanceof Error && error.message ? "（浏览器信息：" + error.message + "）" : "";
+    throw new Error(
+      "无法读取 Globalping 在线探针接口：GET https://api.globalping.io/v1/probes。可能是当前网络/DNS 无法访问，或页面 CSP、浏览器扩展拦截。" +
+      reason +
+      " 可先打开下方“测试 Globalping 接口”链接确认当前浏览器能否访问该地址。"
+    );
   }
 
   let payload: unknown;
