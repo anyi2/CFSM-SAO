@@ -69,7 +69,14 @@ export function Instance() {
       ? slugMatches[0].uuid
       : undefined
     : uuid;
-  const { data: me } = useAuth();
+  const auth = useAuth();
+  const { data: me } = auth;
+
+  // Do not trust a JWT-derived initial snapshot for access to admin-only tools.
+  // Revalidate the actual CFSM session before rendering the port-check module.
+  useEffect(() => {
+    if (!auth.isFetched) void auth.refetch();
+  }, [auth.isFetched, auth.refetch]);
   const themeSettings = useThemeSettings();
   const carrierNames = useCarrierNames();
   const meta = useNodeMeta(resolvedUuid ?? "");
@@ -226,7 +233,7 @@ export function Instance() {
         resourceOrder={themeSettings.instanceResourceCardOrder}
         chartControlsRef={chartControlsRef}
         onNodeReady={alignCharts}
-        portCheck={me?.logged_in ? <PortCheckPanel nodeName={meta.name} /> : null}
+        portCheck={auth.isFetched && auth.isSuccess && me?.logged_in ? <PortCheckPanel nodeName={meta.name} /> : null}
         loadChart={
           visibleDetailModuleOrder.includes("loadChart") ? (
           <>
