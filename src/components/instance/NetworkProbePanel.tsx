@@ -420,10 +420,10 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
               <input type="password" autoComplete="new-password" value={proxyToken} onChange={(event) => setProxyToken(event.target.value)} placeholder="PROBE_PROXY_TOKEN" className="min-h-9 rounded-lg border border-(--hairline) bg-(--bg-card) px-3 text-[11px] font-normal text-(--text-primary)" />
             </label>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={persistConfig} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-(--hairline) px-3 text-[10px] font-semibold text-(--text-secondary)"><Save size={12} />保存到本浏览器</button>
+              <button type="button" onClick={persistConfig} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-(--hairline) px-3 text-[10px] font-semibold text-(--text-secondary)"><Save size={12} />保存本次会话</button>
               <button type="button" onClick={loadNodes} disabled={loadingNodes || !proxyUrl || !proxyToken} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-(--accent-500) px-3 text-[10px] font-bold text-white disabled:opacity-40"><RefreshCw size={12} className={loadingNodes ? "animate-spin" : ""} />{loadingNodes ? "正在读取节点…" : "读取免费节点与已配置平台"}</button>
             </div>
-            <p className="text-[10px] leading-relaxed text-(--text-tertiary)">此处只保存代理地址与访问令牌。Check-Host.net 无需平台 API Key；TCPTest 和 BOCE 的 API Key 只保存在代理服务器，且调用时可能扣除额度或波点。未配置密钥时不会请求这两家的 API。</p>
+            <p className="text-[10px] leading-relaxed text-(--text-tertiary)">代理地址保存在本浏览器；令牌只保存在当前会话，关闭浏览器后需重新填写。Check-Host.net 无需平台 API Key；TCPTest 和 BOCE 的 API Key 只保存在代理服务器，且调用时可能扣除额度或波点。未配置密钥时不会请求这两家的 API。</p>
           </div>
         </details>
 
