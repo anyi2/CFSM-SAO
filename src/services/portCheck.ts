@@ -140,12 +140,12 @@ function throwIfAborted(signal?: AbortSignal): void {
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     throwIfAborted(signal);
-    const timer = window.setTimeout(() => {
+    const timer = globalThis.setTimeout(() => {
       signal?.removeEventListener("abort", onAbort);
       resolve();
     }, ms);
     const onAbort = () => {
-      window.clearTimeout(timer);
+      globalThis.clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
       reject(new DOMException("检测已取消", "AbortError"));
     };
