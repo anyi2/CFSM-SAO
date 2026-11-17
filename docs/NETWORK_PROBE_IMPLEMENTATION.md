@@ -12,8 +12,9 @@
 - 不需要自建 Node.js Proxy、Cloudflare Worker、平台 API Key 或额外 VPS。
 - API 根地址：https://api.globalping.io/v1
 - 每次点击只读取一次 GET /probes，取得当前在线探针。
-- 因为 Globalping 每个 measurement 只能指定一种协议，前端在同一次点击内并行创建三项 measurement：ICMP、TCP、UDP。
-- 三项任务各自轮询结果，单项失败不会清除另外两项已收到的结果。
+- Globalping 每个 measurement 只能指定一种协议，因此先创建 ICMP 基准 measurement，再将它返回的 measurement ID 作为 TCP、UDP 请求的 locations 值，要求 API 复用完全相同的探针组。
+- ICMP 基准任务创建失败时，TCP / UDP 对非 429 错误会独立选点兜底；若基准请求已经触发 HTTP 429，则不再追加两个创建请求，避免继续放大限流。
+- 三项任务分别轮询，单项失败不会清除另外两项已收到的结果；创建后的额度响应头和 GET /limits 查询用于更新额度显示。
 - Globalping 官方允许浏览器跨域请求（CORS *）。匿名使用不需要认证。
 
 ## 探针筛选与去重
@@ -27,7 +28,7 @@
 | 香港 | country=HK；有数据中心探针时优先该类型 | 1 |
 | 美国 | country=US；有数据中心探针时优先该类型 | 1 |
 
-每项 measurement 的每个位置使用 limit: 1，单种协议计划最多六个探针。三种协议合计最多 18 次探针测量。在线清单只用于发现可用地点，并不能锁定具体探针唯一 ID；Globalping 不公开探针唯一 ID。若探针在在线清单读取后离线，实际结果可能少于六条。
+每项 measurement 的每个位置使用 limit: 1，单种协议计划最多六个探针。三种协议合计最多 18 次 probe tests。第一次 ICMP measurement 完成探针选取后，TCP 与 UDP 传入该 measurement ID 来复用相同探针组，API 会保持探针顺序；测试类型和 measurementOptions 仍由新请求分别指定。复用 ID 只在原 measurement 有效期间可用，过期或无效 ID 会返回 422。若探针在在线清单读取后离线，实际结果可能少于六条。
 
 大陆某运营商没有 eyeball-network 时，回退同 ASN 的其他在线探针，并准确标注探针类型。海外国家也只在当时存在在线探针时加入任务，不以新加坡或德国替代日本、香港、美国。
 
@@ -37,10 +38,10 @@
 
 1. 校验目标公网 IPv4 和 TCP/UDP 共用端口。
 2. 读取一次 Globalping 在线探针清单，并更新大陆三网覆盖数量。
-3. 并行提交 ICMP、TCP、UDP 三项测量任务。
-4. 并行轮询尚未完成的任务，单个任务失败时只标记该协议失败，其他协议继续更新。
-5. 把各协议结果按运营商/地区 ID 合并，显示在同一张表中。
-6. 单项超过前端轮询窗口时标记等待超时；不会自动重新提交任务。
+3. 先提交 ICMP 基准任务；成功后把其 measurement ID 传给 TCP 和 UDP，使两项协议复用相同探针。
+4. TCP 和 UDP 并行提交；若 ICMP 基准任务因非 429 错误失败，则两项独立提交，若基准任务遇到 429 则停止继续创建。
+5. 三项任务并行轮询，把各协议结果按运营商/地区 ID 合并显示；单个任务失败不会抹除其他结果。
+6. 每项请求开启 inProgressUpdates，以 1 秒间隔轮询，最多 45 轮；超过窗口的任务标记等待超时，不自动重新提交。
 
 TCP 与 UDP 共用界面中填写的同一个目标端口；ICMP 不需要端口。为了让一次点击能完整执行三项检测，TCP/UDP 端口必须填写且范围为 1–65535。
 
@@ -62,14 +63,15 @@ TCP 与 UDP 共用界面中填写的同一个目标端口；ICMP 不需要端口
 
 ## 请求额度与行为
 
-- 匿名调用无需 API Key。
-- 当前 API 文档列明匿名来源每小时 250 次 probe tests、单次 measurement 最多 50 个探针。
-- 每个探针执行一次测量计为一次 test。本模块每次点击最多创建三项 measurement，每项最多六个探针，合计最多 18 次 probe tests。
-- 三项 measurement 同时提交；每项结果轮询采用 2 秒间隔。
-- 在线探针清单和限额查询不计入 measurement 测试额度。
+- 当前主题采用匿名直接调用，不嵌入共享 API Key。Globalping 当前列明匿名来源每小时 250 次 probe tests，单次 measurement 最多 50 个探针；注册用户 API token 为每小时 500 次、单次最多 500 个探针，但本主题未配置该 token。
+- 每个探针对一次 measurement 的执行计为一次 probe test。每次点击最多创建三项 measurement，每项最多六个探针，合计最多 18 次 probe tests；按额度理论值计算，同一出口 IP 每小时约可完成 13 次满六地区的完整三协议检测（实际消耗随在线探针数变化）。
+- GET /probes 与 GET /limits 不消耗 probe-test 额度；GET /limits 用于显示当前额度类型、总额、剩余数和重置秒数。界面提供手动刷新额度。
+- 创建 measurement 的响应头提供 X-RateLimit-Limit、X-RateLimit-Remaining、X-RateLimit-Reset 等信息；HTTP 429 时解析额度响应头，读取 Retry-After 时显示建议等待时间。浏览器能否直接读取响应头受 CORS expose headers 影响；GET /limits 作为当前额度的权威查询补充。
+- 每个 measurement 的结果 GET 请求按 1 秒间隔轮询，低于官方每个 measurement 每秒最多 2 次的频率上限；最多轮询 45 轮，以覆盖探针端最长 30 秒执行时限及结果回传时间。
+- 开启 inProgressUpdates=true 后，API 可在任务运行中返回部分结果；官方说明最多前五项测试结果会实时更新。
 - 公开测量及目标信息可能被他人通过测量 ID 查看；只提交公网 IP 和端口，不要发送密码、令牌或其他机密数据。
 
-额度、探针在线情况和可用地域可能变化。前端处理 HTTP 429、无匹配探针和服务错误，并保留 AntPing 备用入口。
+额度、探针在线情况和可用地域可能变化。桌面端保留三协议对照表，窄屏改用按地区分组的三协议卡片。前端处理 HTTP 429、无匹配探针和服务错误，并保留 AntPing 备用入口。
 
 官方接口规范：
 - API / OpenAPI：https://github.com/jsdelivr/globalping/blob/master/public/v1/spec.yaml
@@ -89,8 +91,9 @@ TCP 与 UDP 共用界面中填写的同一个目标端口；ICMP 不需要端口
 
 ## 验收范围
 
-- [x] 一次点击并行发起 ICMP、TCP、UDP 三项 measurement。
-- [x] 三种协议在同一张表中显示，不需要切换协议页面。
+- [x] 一次点击发起 ICMP、TCP、UDP 三项 measurement；TCP / UDP 复用 ICMP 基准任务选中的同一组探针。
+- [x] 开启 inProgressUpdates，按 1 秒间隔轮询，最多 45 轮。
+- [x] 桌面三协议对照表与移动端地区卡片呈现结果。
 - [x] 每次只读取一次在线探针清单。
 - [x] 每种协议大陆电信、联通、移动各最多一个探针。
 - [x] 每种协议海外只选择日本、香港、美国，各最多一个探针。
@@ -99,6 +102,7 @@ TCP 与 UDP 共用界面中填写的同一个目标端口；ICMP 不需要端口
 - [x] 大陆家庭/企业宽带探针优先；无此类节点时回退并标注探针类型。
 - [x] ICMP 不需要端口；TCP、UDP 共用一个有效目标端口。
 - [x] 明确说明 UDP 路径响应不代表服务端口开放。
+- [x] 额度卡片读取 /limits，支持手动刷新；429 错误解析额度与重置提示。
 - [x] 不定时、不后台、不自动重跑。
 - [x] AntPing 网页复核链接。
 - [ ] 在用户的 CFSM 实际环境完成三项协议同批次真实端到端测试；Globalping 探针覆盖和运营商表现以使用时 API 实时返回为准。
