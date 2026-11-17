@@ -4,6 +4,14 @@ import { cfsmPost } from "@/services/cfsm/http";
 export type ProbeProviderId = "tcptest" | "boce" | "check-host";
 export type ProbeMode = "ping" | "tcp";
 
+export interface ProbeProviderInfo {
+  id: ProbeProviderId;
+  configured: boolean;
+  requiresApiKey: boolean;
+  billing: "public_api" | "metered_per_successful_node" | "metered_wave_points";
+  usageNote: string;
+}
+
 export interface ProbeProxyConfig {
   baseUrl: string;
   token: string;
@@ -101,8 +109,11 @@ async function proxyRequest<T>(
   return payload as T;
 }
 
-export async function getProbeProviders(config: ProbeProxyConfig, signal?: AbortSignal) {
-  return proxyRequest<{ providers: Array<{ id: ProbeProviderId; configured: boolean }> }>(
+export async function getProbeProviders(
+  config: ProbeProxyConfig,
+  signal?: AbortSignal,
+): Promise<{ providers: ProbeProviderInfo[] }> {
+  return proxyRequest<{ providers: ProbeProviderInfo[] }>(
     config, "/v1/providers", {}, signal,
   );
 }
