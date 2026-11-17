@@ -228,11 +228,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then
-            if [ "${FORCE_PUBLISH}" != "true" ]; then
+            # 正式 main -> dist 每次都发布更新说明。PR 检查已强制要求更新 CHANGELOG.md，
+            # 因此即使静态文件未变化，也必须追加一个空提交，让主题商店记录本次版本说明。
+            # 预览分支仍只在产物变化或显式 force 时发布，避免产生无意义的预览版本。
+            if [ "${FORCE_PUBLISH}" != "true" ] && [ "${TARGET_BRANCH}" != "dist" ]; then
               echo "产物与上次一致，跳过发布：$(git rev-parse HEAD)"
               exit 0
             fi
-            # 只想给商店补一条更新日志时，用同样的产物再发一版。
             git commit -q --allow-empty -m "${RELEASE_NOTE}"
           else
             git commit -q -m "${RELEASE_NOTE}"
