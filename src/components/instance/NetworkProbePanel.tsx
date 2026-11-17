@@ -330,9 +330,16 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
 
   function selectNodes(provider: ProbeProviderId, all: boolean) {
     const list: ProbeNode[] = nodes[provider] ?? [];
+    const mainland = list.filter(isMainlandNode);
+    const candidates = mainland.length ? mainland : list;
+    const balanced = ["电信", "联通", "移动"].flatMap((carrier) =>
+      candidates.filter((node) => carrierLabel(node.carrier) === carrier).slice(0, 2),
+    );
+    const balancedIds = new Set(balanced.map((node) => node.id));
+    const ordered = [...balanced, ...candidates.filter((node) => !balancedIds.has(node.id))];
     setSelected((current) => ({
       ...current,
-      [provider]: all ? list.slice(0, 6).map((node) => node.id) : [],
+      [provider]: all ? ordered.slice(0, 6).map((node) => node.id) : [],
     }));
   }
 
