@@ -20,7 +20,7 @@ import {
 } from "@/hooks/useNode";
 import { findNodesBySlug } from "@/utils/nodeSlug";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
-import { ANONYMOUS_MAX_HISTORY_HOURS } from "@/services/api";
+import { ANONYMOUS_MAX_HISTORY_HOURS, invalidateSiteConfigCache } from "@/services/api";
 import { useLoadRecords, usePingRecords } from "@/hooks/useRecords";
 import { useCarrierNames } from "@/hooks/usePublicConfig";
 import { carrierTaskName } from "@/services/cfsm/mappers";
@@ -75,7 +75,10 @@ export function Instance() {
   // Do not trust a JWT-derived initial snapshot for access to admin-only tools.
   // Revalidate the actual CFSM session before rendering the port-check module.
   useEffect(() => {
-    if (!auth.isFetched) void auth.refetch();
+    if (!auth.isFetched) {
+      invalidateSiteConfigCache();
+      void auth.refetch();
+    }
   }, [auth.isFetched, auth.refetch]);
   const themeSettings = useThemeSettings();
   const carrierNames = useCarrierNames();
