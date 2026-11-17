@@ -204,7 +204,7 @@ export function PortCheckPanel({ nodeName }: { nodeName?: string }) {
               spellCheck={false}
               inputMode="url"
               maxLength={253}
-              placeholder="例如：203.0.113.10 或 server.example.com"
+              placeholder="例如：1.1.1.1 或你的服务器域名"
               value={target}
               onChange={(event) => setTarget(event.target.value)}
               className="min-h-10 w-full rounded-xl border border-(--hairline) bg-(--surface-elev) px-3 text-[12px] font-normal text-(--text-primary) outline-none transition-colors placeholder:text-(--text-tertiary) focus:border-(--accent-500)"
@@ -310,7 +310,7 @@ export function PortCheckPanel({ nodeName }: { nodeName?: string }) {
       </form>
 
       {error && (
-        <div role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-(--status-offline)/25 bg-(--status-offline)/5 px-3 py-2.5 text-[11px] text-(--text-primary)">
+        <div role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-(--hairline) bg-(--surface-elev) px-3 py-2.5 text-[11px] text-(--text-primary)">
           <AlertCircle size={14} className="mt-0.5 shrink-0 text-(--status-offline)" />
           <span>{error}</span>
         </div>
