@@ -1,0 +1,69 @@
+name: Publish CFSM preview theme
+
+on:
+  push:
+    branches:
+      - feature/multi-provider-network-probes
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cfsm-dist-preview
+  cancel-in-progress: true
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build static CFSM theme
+        run: npm run build
+
+      - name: Verify deployable theme root
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s dist/index.html
+          test -d dist/assets
+          test -n "$(find dist/assets -maxdepth 1 -type f -print -quit)"
+          if grep -qE 'src="/src/main\.tsx"|src="/src/main\.jsx"' dist/index.html; then
+            echo "Unbuilt Vite source entry found in dist/index.html"
+            exit 1
+          fi
+          grep -qE 'src="\./assets/[^"]+\.js"' dist/index.html
+          grep -qE 'href="\./assets/[^"]+\.css"' dist/index.html
+          echo "Deployable theme root verified."
+
+      - name: Publish compiled files to dist-preview
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          site_dir="$RUNNER_TEMP/cfsm-theme-site"
+          mkdir -p "$site_dir"
+          cp -a dist/. "$site_dir/"
+
+          cd "$site_dir"
+          git init --initial-branch=dist-preview
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Publish CFSM preview from ${SOURCE_SHA:0:12}"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${REPOSITORY}.git"
+          git push --force origin HEAD:dist-preview

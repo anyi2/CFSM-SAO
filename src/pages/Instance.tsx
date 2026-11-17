@@ -3,7 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { ChevronLeft, Download } from "lucide-react";
 import "uplot/dist/uPlot.min.css";
 import { InstanceDetails } from "@/components/instance/InstanceDetails";
-import { PortCheckPanel } from "@/components/instance/PortCheckPanel";
+import { NetworkProbePanel } from "@/components/instance/NetworkProbePanel";
 import { PingChart } from "@/components/instance/PingChart";
 import { LoadChart } from "@/components/instance/LoadChart";
 import { Spinner } from "@/components/ui/Spinner";
@@ -237,7 +237,7 @@ export function Instance() {
         resourceOrder={themeSettings.instanceResourceCardOrder}
         chartControlsRef={chartControlsRef}
         onNodeReady={alignCharts}
-        portCheck={auth.isFetchedAfterMount && auth.isSuccess && me?.logged_in ? <PortCheckPanel nodeName={meta.name} /> : null}
+        portCheck={auth.isFetchedAfterMount && auth.isSuccess && me?.logged_in ? <NetworkProbePanel nodeName={meta.name} nodeUuid={resolvedUuid} /> : null}
         loadChart={
           visibleDetailModuleOrder.includes("loadChart") ? (
           <>
