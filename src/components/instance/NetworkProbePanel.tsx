@@ -7,14 +7,42 @@ import { InstancePanel } from "./InstancePanel";
 import {
   createProbeTask, getCurrentNodePublicIpv4, getProbeNodes, getProbeProxyConfig, getProbeQuota,
   getProbeResult, saveProbeProxyConfig,
-  type ProbeMode, type ProbeNode, type ProbeProviderId, type ProbeProxyConfig,
+  type ProbeMode, type ProbeNode, type ProbeProviderId, type ProbeProviderInfo, type ProbeProxyConfig,
   type ProbeResult, type ProbeTask,
 } from "@/services/networkProbe";
 
-const PROVIDERS: Array<{ id: ProbeProviderId; label: string; note: string }> = [
-  { id: "tcptest", label: "TCPTest", note: "大陆多运营商节点" },
-  { id: "boce", label: "BOCE", note: "大陆多运营商节点" },
-  { id: "check-host", label: "Check-Host.net", note: "全球节点，按实际大陆节点展示" },
+const PROVIDERS: Array<{
+  id: ProbeProviderId;
+  label: string;
+  note: string;
+  paid: boolean;
+  pingUrl: string;
+  tcpUrl: string;
+}> = [
+  {
+    id: "check-host",
+    label: "Check-Host.net",
+    note: "公开 API · 无需 API Key · 当前节点列表无中国大陆节点",
+    paid: false,
+    pingUrl: "https://check-host.net/check-ping",
+    tcpUrl: "https://check-host.net/check-tcp",
+  },
+  {
+    id: "tcptest",
+    label: "TCPTest",
+    note: "大陆多运营商网页工具；API 按成功节点扣额度",
+    paid: true,
+    pingUrl: "https://www.tcptest.cn/ping",
+    tcpUrl: "https://www.tcptest.cn/tcping",
+  },
+  {
+    id: "boce",
+    label: "BOCE",
+    note: "大陆多运营商网页工具；API 按节点及接口单价扣波点",
+    paid: true,
+    pingUrl: "https://www.boce.com/ping",
+    tcpUrl: "https://www.boce.com/tcping",
+  },
 ];
 
 type ResultRow = {
@@ -48,6 +76,11 @@ function carrierLabel(value: string): string {
   if (/联通|unicom|china169|cucc/.test(text)) return "联通";
   if (/移动|mobile|cmnet|cmcc/.test(text)) return "移动";
   return value || "未识别运营商";
+}
+
+function isMainlandNode(node: ProbeNode): boolean {
+  return node.countryCode.toUpperCase() === "CN" ||
+    ["中国", "china", "cn"].includes(node.country.trim().toLowerCase());
 }
 
 function rowsFromResult(task: ProbeTask, result: ProbeResult): ResultRow[] {
@@ -173,8 +206,9 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
   const [nodes, setNodes] = useState<Partial<Record<ProbeProviderId, ProbeNode[]>>>({});
   const [quotaStatus, setQuotaStatus] = useState<Partial<Record<ProbeProviderId, string>>>({});
   const [selected, setSelected] = useState<Partial<Record<ProbeProviderId, string[]>>>({});
+  const [providerStatus, setProviderStatus] = useState<Partial<Record<ProbeProviderId, ProbeProviderInfo>>>({});
   const [enabled, setEnabled] = useState<Record<ProbeProviderId, boolean>>({
-    tcptest: true, boce: true, "check-host": true,
+    tcptest: false, boce: false, "check-host": true,
   });
   const [loadingNodes, setLoadingNodes] = useState(false);
   const [running, setRunning] = useState(false);
@@ -222,31 +256,73 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
     setProviderErrors({});
     setQuotaStatus({});
     try {
+      const response = await getProbeProviders(nextConfig);
+      const statusMap = Object.fromEntries(response.providers.map((provider) => [provider.id, provider]));
+      setProviderStatus(statusMap);
+
       const entries = await Promise.all(PROVIDERS.map(async (provider) => {
+        const status = statusMap[provider.id];
+        if (!status?.configured) return [provider.id, [] as ProbeNode[]] as const;
         try {
           const [list, quota] = await Promise.all([
             getProbeNodes(nextConfig, provider.id),
-            getProbeQuota(nextConfig, provider.id).catch(() => null),
+            provider.paid ? getProbeQuota(nextConfig, provider.id).catch(() => null) : Promise.resolve(null),
           ]);
-          const mainland = list.filter((node) => node.countryCode.toUpperCase() === "CN" || ["中国", "china", "cn"].includes(node.country.trim().toLowerCase()));
-          if (quota) {
+          if (!provider.paid) {
+            setQuotaStatus((current) => ({
+              ...current,
+              [provider.id]: "公开 API，无需 API Key；请遵守平台调用频率限制。",
+            }));
+          } else if (quota) {
             const payload = asRecord(quota.quota);
             const nested = asRecord(payload.data);
             const remaining = payload.remaining ?? payload.available ?? payload.quota ?? nested.remaining ?? nested.available ?? nested.quota;
             const message = typeof payload.message === "string" ? payload.message : "";
-            setQuotaStatus((current) => ({ ...current, [provider.id]: remaining != null ? `可用额度：${String(remaining)}` : message || "额度信息未由接口公开" }));
+            setQuotaStatus((current) => ({
+              ...current,
+              [provider.id]: remaining != null
+                ? `可用额度：${String(remaining)}`
+                : message || status.usageNote,
+            }));
+          } else {
+            setQuotaStatus((current) => ({ ...current, [provider.id]: status.usageNote }));
           }
-          return [provider.id, mainland] as const;
+          return [provider.id, list] as const;
         } catch (caught) {
-          setProviderErrors((current) => ({ ...current, [provider.id]: caught instanceof Error ? caught.message : "节点获取失败" }));
-          return [provider.id, []] as const;
+          setProviderErrors((current) => ({
+            ...current,
+            [provider.id]: caught instanceof Error ? caught.message : "节点获取失败",
+          }));
+          return [provider.id, [] as ProbeNode[]] as const;
         }
       }));
+
       const nextNodes: Partial<Record<ProbeProviderId, ProbeNode[]>> = {};
       for (const [provider, list] of entries) nextNodes[provider] = list;
       setNodes(nextNodes);
-      setSelected({});
-      if (entries.every(([, list]) => list.length === 0)) setError("没有获取到可用的大陆探测节点，请检查代理配置、API Key 或平台节点覆盖。");
+
+      // The no-key public Check-Host node list currently contains nearby Asian
+      // locations (for example Hong Kong, Japan and Singapore), but no mainland
+      // carrier nodes. Preselect at most three of those real nodes for a modest
+      // first run. Paid providers remain unselected until the administrator
+      // explicitly chooses their nodes.
+      const checkHostNodes = nextNodes["check-host"] ?? [];
+      const priority = ["HK", "JP", "SG", "VN", "ID", "IN"];
+      const defaultNodes = [...checkHostNodes]
+        .sort((a, b) => {
+          const ai = priority.indexOf(a.countryCode.toUpperCase());
+          const bi = priority.indexOf(b.countryCode.toUpperCase());
+          return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
+        })
+        .slice(0, 3)
+        .map((node) => node.id);
+      setSelected({ "check-host": defaultNodes });
+
+      if (!checkHostNodes.length && !entries.some(([provider, list]) => provider !== "check-host" && list.length > 0)) {
+        setError("没有获取到可用节点。请检查代理地址和令牌；未配置付费 API 的平台不会请求其节点接口。");
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "读取检测平台信息失败，请检查代理配置。");
     } finally {
       setLoadingNodes(false);
     }
@@ -256,7 +332,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
     const list: ProbeNode[] = nodes[provider] ?? [];
     setSelected((current) => ({
       ...current,
-      [provider]: all ? list.slice(0, 30).map((node) => node.id) : [],
+      [provider]: all ? list.slice(0, 6).map((node) => node.id) : [],
     }));
   }
 
@@ -270,6 +346,17 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
     }
     const chosen = PROVIDERS.filter((provider) => enabled[provider.id] && (selected[provider.id]?.length || 0) > 0);
     if (!chosen.length) { setError("请至少选择一个平台及其探测节点"); return; }
+
+    const metered = chosen.filter((provider) => provider.paid);
+    if (metered.length > 0) {
+      const meteredSummary = metered.map((provider) =>
+        `${provider.label}：${selected[provider.id]?.length || 0} 个节点`,
+      ).join("\n");
+      const confirmed = window.confirm(
+        `本次将调用可能扣费的 API：\n${meteredSummary}\n\nTCPTest 按成功节点扣额度；BOCE 按接口单价和节点数量扣波点。当前界面无法保证这两家账户的实时单价。请确认已在平台控制台核对余额和费用。\n\n仍要提交吗？`,
+      );
+      if (!confirmed) return;
+    }
 
     setRunning(true);
     setError("");
@@ -293,7 +380,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
     if (!activeTasks.length) { setRunning(false); setError("所有平台任务提交失败，请检查 API 配置与额度。"); return; }
 
     let latest: Partial<Record<ProbeProviderId, ProbeResult>> = {};
-    for (let attempt = 0; attempt < 40; attempt += 1) {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
       const settled = await Promise.all(activeTasks.map(async (task) => {
         try { return await getProbeResult(config, task.provider, task.taskId); }
         catch (caught) {
@@ -304,7 +391,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
       settled.forEach((result) => { if (result) latest[result.provider] = result; });
       setResults({ ...latest });
       if (activeTasks.every((task) => latest[task.provider] && !latest[task.provider]?.pending)) break;
-      if (attempt < 39) await new Promise((resolve) => setTimeout(resolve, 2000));
+      if (attempt < 11) await new Promise((resolve) => setTimeout(resolve, 10_000));
     }
     setRunning(false);
   }
@@ -312,10 +399,10 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
   return (
     <InstancePanel
       id="instance-network-probes"
-      title="大陆网络连通性检测"
+      title="网络连通性检测"
       kicker={<span className="inline-flex items-center gap-1.5"><ShieldCheck size={12} />管理员工具</span>}
       titleAction={<span className="rounded-full border border-(--hairline) px-2.5 py-1 text-[10px] font-semibold text-(--text-tertiary)">手动检测</span>}
-      description={<>{nodeName ? `当前实例：${nodeName}。 ` : ""}ICMP Ping 与 TCP 端口同等重要；三家平台独立探测、并排对比。</>}
+      description={<>{nodeName ? `当前实例：${nodeName}。 ` : ""}ICMP Ping 与 TCP 端口同等重要。免费公开 API 用于国际节点对照；大陆三网需使用已配置的 TCPTest / BOCE 账户 API，或打开其官方网页手动检测。</>}
       className="instance-network-probe-panel"
     >
       <div className="flex flex-col gap-3">
@@ -334,9 +421,9 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
             </label>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={persistConfig} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-(--hairline) px-3 text-[10px] font-semibold text-(--text-secondary)"><Save size={12} />保存到本浏览器</button>
-              <button type="button" onClick={loadNodes} disabled={loadingNodes || !proxyUrl || !proxyToken} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-(--accent-500) px-3 text-[10px] font-bold text-white disabled:opacity-40"><RefreshCw size={12} className={loadingNodes ? "animate-spin" : ""} />{loadingNodes ? "正在读取节点…" : "读取三家节点"}</button>
+              <button type="button" onClick={loadNodes} disabled={loadingNodes || !proxyUrl || !proxyToken} className="inline-flex min-h-8 items-center gap-1.5 rounded-lg bg-(--accent-500) px-3 text-[10px] font-bold text-white disabled:opacity-40"><RefreshCw size={12} className={loadingNodes ? "animate-spin" : ""} />{loadingNodes ? "正在读取节点…" : "读取免费节点与已配置平台"}</button>
             </div>
-            <p className="text-[10px] leading-relaxed text-(--text-tertiary)">第三方平台 API Key 只保存在代理服务器；此处仅保存代理地址与访问令牌，不会保存 TCPTest / BOCE 的平台密钥。</p>
+            <p className="text-[10px] leading-relaxed text-(--text-tertiary)">此处只保存代理地址与访问令牌。Check-Host.net 无需平台 API Key；TCPTest 和 BOCE 的 API Key 只保存在代理服务器，且调用时可能扣除额度或波点。未配置密钥时不会请求这两家的 API。</p>
           </div>
         </details>
 
@@ -368,18 +455,45 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
           {PROVIDERS.map((provider) => {
             const list = nodes[provider.id] || [];
             const count = selected[provider.id]?.length || 0;
+            const status = providerStatus[provider.id];
+            const mainlandCount = list.filter(isMainlandNode).length;
+            const overseasCount = list.length - mainlandCount;
+            const canUseApi = Boolean(status?.configured);
             return (
               <div key={provider.id} className="rounded-xl border border-(--hairline) p-3">
                 <label className="flex items-center gap-2 text-[11px] font-semibold text-(--text-primary)">
-                  <input type="checkbox" checked={enabled[provider.id]} onChange={(event) => setEnabled((current) => ({ ...current, [provider.id]: event.target.checked }))} />
+                  <input
+                    type="checkbox"
+                    checked={enabled[provider.id]}
+                    disabled={!canUseApi}
+                    onChange={(event) => setEnabled((current) => ({ ...current, [provider.id]: event.target.checked }))}
+                  />
                   {provider.label}
+                  {provider.paid
+                    ? <span className="rounded-full border border-(--hairline) px-1.5 py-0.5 text-[9px] font-medium text-(--text-tertiary)">按量计费</span>
+                    : <span className="rounded-full border border-(--hairline) px-1.5 py-0.5 text-[9px] font-medium text-(--status-online)">无需 Key</span>}
                 </label>
                 <p className="mt-1 text-[10px] text-(--text-tertiary)">{provider.note}</p>
-                <div className="mt-2 text-[10px] text-(--text-secondary)">大陆节点 {list.length} · 已选 {count}</div>
+                <div className="mt-2 text-[10px] text-(--text-secondary)">大陆节点 {mainlandCount} · 海外节点 {overseasCount} · 已选 {count}</div>
                 {quotaStatus[provider.id] && <div className="mt-1 text-[9px] text-(--text-tertiary)">{quotaStatus[provider.id]}</div>}
-                {!quotaStatus[provider.id] && <div className="mt-1 text-[9px] text-(--text-tertiary)">额度：需在平台控制台确认</div>}
+                {provider.paid && !canUseApi && (
+                  <p className="mt-1 text-[9px] text-(--text-tertiary)">API 未配置，系统不会发起计费请求。</p>
+                )}
+                {provider.paid && !canUseApi && (
+                  <a
+                    href={mode === "ping" ? provider.pingUrl : provider.tcpUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-block text-[10px] font-semibold text-(--accent-500) hover:underline"
+                  >
+                    打开官方网页手动检测
+                  </a>
+                )}
+                {provider.paid && canUseApi && !quotaStatus[provider.id] && (
+                  <p className="mt-1 text-[9px] text-(--text-tertiary)">{status?.usageNote || "可能产生平台额度费用"}</p>
+                )}
                 <div className="mt-2 flex gap-2">
-                  <button type="button" disabled={!list.length} onClick={() => selectNodes(provider.id, true)} className="text-[10px] font-semibold text-(--accent-500) disabled:opacity-40">选前 30 个</button>
+                  <button type="button" disabled={!list.length} onClick={() => selectNodes(provider.id, true)} className="text-[10px] font-semibold text-(--accent-500) disabled:opacity-40">选前 6 个</button>
                   <button type="button" disabled={!count} onClick={() => selectNodes(provider.id, false)} className="text-[10px] text-(--text-tertiary) disabled:opacity-40">清空</button>
                 </div>
                 {providerErrors[provider.id] && <p className="mt-2 text-[10px] text-(--status-offline)">{providerErrors[provider.id]}</p>}
@@ -389,12 +503,12 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
                       <label key={node.id} className="flex items-center gap-2 py-1 text-[10px] text-(--text-secondary)">
                         <input type="checkbox" checked={(selected[provider.id] || []).includes(node.id)} onChange={(event) => setSelected((current) => {
                           const previous = current[provider.id] || [];
-                          return { ...current, [provider.id]: event.target.checked ? [...previous, node.id].slice(0, 30) : previous.filter((id) => id !== node.id) };
+                          return { ...current, [provider.id]: event.target.checked ? [...previous, node.id].slice(0, 6) : previous.filter((id) => id !== node.id) };
                         })} />
                         <span className="min-w-0 truncate">{node.name || node.id} {node.city ? `· ${node.city}` : ""} {node.carrier ? `· ${carrierLabel(node.carrier)}` : ""}</span>
                       </label>
                     ))}
-                    {list.length > 50 && <p className="pt-1 text-[9px] text-(--text-tertiary)">仅显示前 50 个节点，可选数量上限 30。</p>}
+                    {list.length > 50 && <p className="pt-1 text-[9px] text-(--text-tertiary)">仅显示前 50 个节点；单次最多选择 6 个。</p>}
                   </div>
                 )}
               </div>
@@ -405,7 +519,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-(--hairline) pt-3">
           <div className="flex max-w-xl items-start gap-2 text-[10px] leading-relaxed text-(--text-tertiary)">
             <CircleHelp size={13} className="mt-0.5 shrink-0" />
-            <span>{mode === "ping" ? "ICMP 无响应可能是目标防火墙屏蔽 Ping，不代表 TCP 不通。" : "TCP 超时可能由防火墙或线路过滤造成，不等于服务一定停止。"}每次只在点击时创建任务；结果轮询仅用于等待本次任务完成，不会周期性重新检测。各平台按自身套餐规则计费。</span>
+            <span>{mode === "ping" ? "ICMP 无响应可能是目标防火墙屏蔽 Ping，不代表 TCP 不通。" : "TCP 超时可能由防火墙或线路过滤造成，不等于服务一定停止。"}Check-Host.net 当前公开节点列表未包含中国大陆节点；TCPTest / BOCE 才能提供大陆多运营商节点，但 API 可能扣费。未配置付费 API 时可打开官网手动测试。每次仅在点击时提交检测。</span>
           </div>
           <button type="button" onClick={() => void runChecks()} disabled={running || !target.trim() || selectedCount === 0} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-(--accent-500) px-4 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
             {running ? <LoaderCircle size={14} className="animate-spin" /> : <Activity size={14} />}
