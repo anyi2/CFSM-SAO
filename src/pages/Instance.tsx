@@ -71,15 +71,16 @@ export function Instance() {
     : uuid;
   const auth = useAuth();
   const { data: me } = auth;
+  const authRefreshRequested = useRef(false);
 
-  // Do not trust a JWT-derived initial snapshot for access to admin-only tools.
-  // Revalidate the actual CFSM session before rendering the port-check module.
+  // Do not trust a cached/JWT-derived initial snapshot for admin-only tools.
+  // Revalidate the actual CFSM session on each details-page mount.
   useEffect(() => {
-    if (!auth.isFetched) {
-      invalidateSiteConfigCache();
-      void auth.refetch();
-    }
-  }, [auth.isFetched, auth.refetch]);
+    if (authRefreshRequested.current) return;
+    authRefreshRequested.current = true;
+    invalidateSiteConfigCache();
+    void auth.refetch();
+  }, [auth.refetch]);
   const themeSettings = useThemeSettings();
   const carrierNames = useCarrierNames();
   const meta = useNodeMeta(resolvedUuid ?? "");
@@ -236,7 +237,7 @@ export function Instance() {
         resourceOrder={themeSettings.instanceResourceCardOrder}
         chartControlsRef={chartControlsRef}
         onNodeReady={alignCharts}
-        portCheck={auth.isFetched && auth.isSuccess && me?.logged_in ? <PortCheckPanel nodeName={meta.name} /> : null}
+        portCheck={auth.isFetchedAfterMount && auth.isSuccess && me?.logged_in ? <PortCheckPanel nodeName={meta.name} /> : null}
         loadChart={
           visibleDetailModuleOrder.includes("loadChart") ? (
           <>
