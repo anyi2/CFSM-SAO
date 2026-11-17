@@ -22,7 +22,7 @@ const PROVIDERS: Array<{
   {
     id: "check-host",
     label: "Check-Host.net",
-    note: "公开 API · 无需 API Key · 当前节点列表无中国大陆节点",
+    note: "公开 API · 无需 API Key · 节点覆盖以实时列表为准",
     paid: false,
     pingUrl: "https://check-host.net/check-ping",
     tcpUrl: "https://check-host.net/check-tcp",
@@ -310,12 +310,15 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
       // explicitly chooses their nodes.
       const checkHostNodes = nextNodes["check-host"] ?? [];
       const priority = ["HK", "JP", "SG", "VN", "ID", "IN"];
-      const defaultNodes = [...checkHostNodes]
+      const mainlandNodes = checkHostNodes.filter(isMainlandNode);
+      const nearbyAsiaNodes = checkHostNodes
+        .filter((node) => !isMainlandNode(node))
         .sort((a, b) => {
           const ai = priority.indexOf(a.countryCode.toUpperCase());
           const bi = priority.indexOf(b.countryCode.toUpperCase());
           return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
-        })
+        });
+      const defaultNodes = [...mainlandNodes, ...nearbyAsiaNodes]
         .slice(0, 3)
         .map((node) => node.id);
       setSelected({ "check-host": defaultNodes });
