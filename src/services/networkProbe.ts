@@ -222,8 +222,9 @@ function findServerIpv4(payload: unknown, uuid: string, depth = 0): string | nul
   }
 
   const record = payload as Record<string, unknown>;
-  const recordUuid = record.uuid ?? record.server_uuid ?? record.id;
-  if (String(recordUuid ?? "") === uuid) {
+  const matchesServer = [record.uuid, record.server_uuid, record.id]
+    .some((candidate) => String(candidate ?? "") === uuid);
+  if (matchesServer) {
     // Admin list may expose the latest metrics directly or inside a nested
     // metrics/report object. Search only this matched server subtree.
     return findPublicIpv4InRecord(record);
