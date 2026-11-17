@@ -143,6 +143,17 @@ async function getNodes(provider) {
   })).filter((node) => node.id);
 }
 
+async function getQuota(provider) {
+  requireProvider(provider);
+  if (provider === "tcptest") {
+    return await upstream("https://www.tcptest.cn/api/open/v1/quota", { headers: tcptestHeaders() });
+  }
+  if (provider === "boce") {
+    return { available: false, message: "当前公开 API 文档未列出额度查询接口，请在 BOCE 控制台确认波点余额。" };
+  }
+  return { available: false, message: "Check-Host.net 公开 API 未提供可用额度接口，请遵守其公开 API 限流规则。" };
+}
+
 async function createCheck(provider, input) {
   requireProvider(provider);
   const target = normalizeTarget(input.target);
