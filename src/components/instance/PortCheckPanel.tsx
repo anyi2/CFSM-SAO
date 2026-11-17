@@ -32,9 +32,7 @@ const TCP_PRESETS = [
   { port: 22, label: "SSH" },
   { port: 80, label: "HTTP" },
   { port: 443, label: "HTTPS" },
-  { port: 3306, label: "MySQL" },
-  { port: 5432, label: "PostgreSQL" },
-  { port: 8443, label: "自定义服务" },
+  { port: 10443, label: "自定义服务" },
 ];
 
 const UDP_PRESETS = [
