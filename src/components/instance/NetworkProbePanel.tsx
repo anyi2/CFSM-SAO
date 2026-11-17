@@ -29,8 +29,6 @@ type ResultRow = {
   detail: string;
 };
 
-const STORAGE_DEFAULTS: ProbeProxyConfig = { baseUrl: "", token: "" };
-
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -237,8 +235,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
     }));
   }
 
-  async function runChecks(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function runChecks() {
     if (running) return;
     if (!target.trim()) { setError("请填写目标公网 IPv4"); return; }
     const port = Number(portText);
@@ -388,7 +385,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
             <CircleHelp size={13} className="mt-0.5 shrink-0" />
             <span>{mode === "ping" ? "ICMP 无响应可能是目标防火墙屏蔽 Ping，不代表 TCP 不通。" : "TCP 超时可能由防火墙或线路过滤造成，不等于服务一定停止。"}每次只在点击时创建任务；结果轮询仅用于等待本次任务完成，不会周期性重新检测。各平台按自身套餐规则计费。</span>
           </div>
-          <button type="button" onClick={() => void runChecks(new Event("submit") as unknown as React.FormEvent<HTMLFormElement>)} disabled={running || !target.trim() || selectedCount === 0} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-(--accent-500) px-4 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
+          <button type="button" onClick={() => void runChecks()} disabled={running || !target.trim() || selectedCount === 0} className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-(--accent-500) px-4 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
             {running ? <LoaderCircle size={14} className="animate-spin" /> : <Activity size={14} />}
             {running ? "正在检测…" : `开始对比（${selectedCount} 个节点）`}
           </button>
