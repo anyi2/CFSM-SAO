@@ -36,7 +36,9 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 function finiteNumber(value: unknown): number | null {
-  const n = typeof value === "number" ? value : Number(value);
+  if (value == null || value === "") return null;
+  const normalized = typeof value === "string" ? value.trim().replace(/%$/, "") : value;
+  const n = typeof normalized === "number" ? normalized : Number(normalized);
   return Number.isFinite(n) ? n : null;
 }
 
