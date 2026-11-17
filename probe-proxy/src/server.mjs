@@ -217,7 +217,10 @@ async function createCheck(provider, input) {
     url.searchParams.set("max_nodes", String(selected.length));
     for (const id of selected) url.searchParams.append("node", id);
     const result = await upstream(url);
-    return { provider, mode, target, port, taskId: String(result.request_id), reportUrl: result.permanent_link || "", nodes: result.nodes || {}, createdAt: Date.now() };
+    if (Number(result.ok) !== 1 || !result.request_id || !result.nodes || typeof result.nodes !== "object") {
+      throw new HttpError(result.error || "Check-Host.net 未返回有效任务信息", 502);
+    }
+    return { provider, mode, target, port, taskId: String(result.request_id), reportUrl: result.permanent_link || "", nodes: result.nodes, createdAt: Date.now() };
   }
 
   if (!nodeIds.length) throw new Error("请先获取节点并选择探测节点，避免意外消耗额度");
