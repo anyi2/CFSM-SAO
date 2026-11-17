@@ -29,12 +29,6 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Network probe proxy syntax and tests
-        run: |
-          node --check probe-proxy/src/server.mjs
-          cd probe-proxy
-          npm test
-
       - name: Lint
         run: npm run lint
 

@@ -1,81 +1,91 @@
-# Multi-provider network probe implementation
+# CFSM 大陆 TCP 端口检测（Globalping）
 
-## Product contract
+## 目标
 
-The instance detail page provides two equally important, separate modes:
+管理员在实例详情页手动检测当前 VPS 的公网 IPv4 和指定 TCP 端口，从中国电信、联通、移动的在线探针发起 TCP Ping，并使用海外节点作对照。只检测管理员点击提交的单次任务；不做定时巡检、后台扫描或自动重试任务。
 
-1. **ICMP Ping** — per-node reachability, packet loss and available latency samples.
-2. **TCP connect** — connection outcome and connect latency for an explicit public IPv4 + port.
+## 运行结构
 
-The three independent comparison sources are TCPTest, BOCE and Check-Host.net. A single explicit click creates a task for each enabled provider. Polling only retrieves results for those tasks; no cron, scheduler, background scan or automatic repeat check is part of this feature.
+- CFSM-SAO 是静态主题，直接从浏览器调用 Globalping 公共 API。
+- 不需要自建 Node.js Proxy、Cloudflare Worker、平台 API Key 或额外 VPS。
+- API 根地址：https://api.globalping.io/v1
+- GET /probes 读取当前在线探针，按探针自己的 location.country 和 location.asn 统计覆盖。
+- POST /measurements 创建检测；GET /measurements/{id} 轮询任务结果。
+- Globalping 官方允许浏览器跨域请求（CORS *）。匿名使用不需要认证。
 
-## Cost-aware provider policy
+## 探针筛选
 
-| Provider | API key | API cost model | Default behavior | Mainland coverage |
-|---|---|---|---|---|
-| Check-Host.net | Not required for public API | Public API; respect its usage/rate rules | Enabled by default | Current public node list at implementation time did not include Mainland China |
-| TCPTest | Required | Charges quota per successfully executed probe node | Disabled unless API key is configured and selected | Mainland multi-carrier tools/nodes; verify actual live list |
-| BOCE | Required | Deducts wave points based on API unit price and selected nodes | Disabled unless API key is configured and selected | Mainland default node list in official API docs |
+| 线路 | ASN | 请求筛选 |
+|---|---:|---|
+| 中国电信 | AS4134 | country=CN + asn=4134 |
+| 中国联通 | AS4837 | country=CN + asn=4837 |
+| 中国移动 | AS9808 | country=CN + asn=9808 |
 
-When TCPTest/BOCE credentials are absent, the proxy must not call their node, quota or task APIs. The UI instead links to the provider's official Ping/TCPing web tools for manual operation; those web tools remain subject to their own usage limits and account policies. Before any metered task submission the UI requires a confirmation that explains the provider and selected node count. The default maximum selection is six nodes per provider/task, configurable server-side but capped in code.
+每家运营商最多请求两个探针。若该 ASN 下存在 eyeball-network（家庭/企业宽带）探针，优先只选这些探针；否则回退到该 ASN 下当前在线的其他探针，并在结果中显示探针类别。海外对照从在线探针中依次选择日本、新加坡、美国、德国，最多两个地点。
 
-Official documentation:
-- TCPTest API: https://www.tcptest.cn/member/api-docs
-- BOCE API: https://www.boce.com/api-console
-- Check-Host.net API: https://check-host.net/about/api
+Globalping 不公开探针唯一 ID，使用国家、ASN、tags、limit 进行筛选；实际执行数量可能少于请求数量。探针在线情况随社区设备状态动态变化，主题每次手动检测前重新读取在线清单。若三家运营商均无匹配探针，不提交伪造结果，而是提示使用 AntPing 手动复核。
 
-## Provider API contracts currently implemented
+## API 请求
 
-| Provider | Node list | ICMP | TCP | Result retrieval | Credentials |
-|---|---|---|---|---|---|
-| TCPTest | `GET /api/open/v1/nodes` | `POST /api/open/v1/tasks`, type `ping` | same endpoint, type `tcping` | `GET /tasks/{id}`, `GET /tasks/{id}/results` | Bearer API Key |
-| BOCE | `GET /v3/node/list` (mainland default) | `GET /v3/task/create/ping` | `GET /v3/task/create/tcping` | `GET /v3/task/ping/{id}`, `GET /v3/task/tcping/{id}` | key query parameter |
-| Check-Host.net | `GET /nodes/hosts` | `GET /check-ping` | `GET /check-tcp` | `GET /check-result/{request_id}` | Public API, no provider key in documented basic flow |
+示意请求（探针地点数量由每次实时在线清单动态计算）：
 
-TCPTest and BOCE request/result payloads remain provisional until authenticated test tasks are run with real provider accounts. Keep provider-specific adapters isolated and do not mark the normalizers production-verified based solely on UI/API documentation.
+~~~json
+{
+  "type": "ping",
+  "target": "45.67.89.10",
+  "locations": [
+    { "country": "CN", "asn": 4134, "tags": ["eyeball-network"], "limit": 2 },
+    { "country": "CN", "asn": 4837, "limit": 2 },
+    { "country": "CN", "asn": 9808, "limit": 2 },
+    { "country": "JP", "limit": 1 },
+    { "country": "SG", "limit": 1 }
+  ],
+  "measurementOptions": {
+    "protocol": "TCP",
+    "port": 443,
+    "packets": 3
+  }
+}
+~~~
 
-## Security and deployment boundary
+TCP 检测使用 Globalping 的 type: ping + measurementOptions.protocol: TCP + port，不是 ICMP Ping。
 
-CFSM-SAO is a static theme and must not contain provider API credentials. `probe-proxy/` is a separate Node.js 22 service:
+## 免费额度
 
-- provider API keys, if any, live only in the proxy process environment;
-- the browser uses a separate proxy token stored in session storage only;
-- exact browser origins are allow-listed;
-- proxy binds to loopback by default and must sit behind HTTPS reverse proxy;
-- targets are restricted to public IPs/public DNS names;
-- explicit node selection, six-node default cap and per-target/provider cooldown protect against accidental usage;
-- never add provider keys to Vite variables, theme settings, repository files or client storage.
+根据 Globalping 官方 API 文档（2026-11-17 核验）：
 
-The proxy has no persistent database. Task metadata is held in memory until expiry; a proxy restart means an in-flight task cannot be polled via this proxy instance.
+- 匿名调用无需 API Key。
+- 每个来源 IP 每小时最多 250 个探测测试。
+- 单次测量最多 50 个探针。
+- 每个探针执行一次测量计为一个测试；每次 CFSM 检测按当前在线探针数消耗额度。
+- 单个测量结果按需轮询，文档限制为每个 measurement 每秒最多 2 个 GET 请求。主题采用 2 秒轮询间隔。
+- 在线探针列表和当前限额查询不计入测量测试额度。
+- 公开测量及目标信息可能被他人凭测量 ID 查看；只提交公网 IP 和端口，不要发送密码、令牌或其他机密数据。
 
-## Node coverage and comparison semantics
+额度和探针可用性可能调整。前端处理 HTTP 429、无匹配探针和服务错误，并保留 AntPing 备用入口。
 
-Fetch each provider's node list independently. A node is classified Mainland China only when its own metadata says country code `CN` or country `中国`. Do not infer carrier or city from an IP address. Do not label Check-Host.net Hong Kong or other overseas nodes as Mainland China. The UI shows Mainland and overseas counts separately; Check-Host.net's current list can change.
+官方文档：
+- API / OpenAPI：https://github.com/jsdelivr/globalping/blob/master/public/v1/spec.yaml
+- 项目说明与使用限制：https://github.com/jsdelivr/globalping
+- 在线探针与服务：https://globalping.io/
 
-The theme keeps provider-specific node IDs separate. It must not pretend that nodes from different platforms are the same physical node. No fake cross-provider same-city one-to-one matching.
+## 结果解释
 
-## Important result semantics
+- TCP 有响应：探针收到目标端口的 TCP 响应。
+- 目标拒绝/重置：网络路径到达目标，但目标端口可能未监听或主动拒绝；不能标记为“大陆封禁”。
+- 无 TCP 响应：可能是防火墙丢弃、线路过滤、路由异常、目标离线或探针限制，单次超时不能证明封禁。
+- 需要结合三家运营商、海外对照、服务器本机监听和防火墙复测。
+- 家庭/企业宽带探针比数据中心探针更能代表普通用户接入网络；结果表始终标注实际 probe tags，不混淆两者。
 
-- ICMP timeout means no ICMP response was received; it does not prove TCP is unavailable.
-- TCP timeout may be firewall, filtering, routing or a closed service; it does not prove the host is offline.
-- Provider errors, pending nodes and target failures must remain separate states.
-- Preserve provider raw data and each provider's own latency/loss definition; aggregate only within one provider.
-- Result polling retrieves the current manually submitted task only. It must not create another detection.
+## 验收范围
 
-## Current implementation status (draft)
-
-- [x] Initial proxy service, environment template, Dockerfile and deployment notes.
-- [x] Check-Host.net node discovery and initial Ping/TCP adapters.
-- [x] Initial BOCE and TCPTest adapters (payload/result normalization still needs live account verification).
-- [x] Admin-only instance detail UI for separate ICMP and TCP modes.
-- [ ] Validate current-instance public IPv4 lookup against a live CFSM Admin API response (the matching-record lookup and manual fallback are implemented; exact deployment payload still needs a live check).
-- [x] Free-first default and no-key Check-Host path.
-- [x] Paid provider disabled until credentials configured; explicit confirmation before metered requests.
-- [x] Actual node locations shown without filtering overseas Check-Host nodes into fake Mainland coverage.
-- [ ] Verify TCPTest request body and response shapes against a real API account.
-- [ ] Verify BOCE node-list response shape, exact wave-point prices and task result fields against a real account.
-- [ ] Run live Check-Host.net Ping/TCP tasks to confirm live availability from the proxy's deployment network.
-- [ ] Confirm CFSM Admin API `action=list` field mapping for the selected node's `ip_v4` against an actual server response.
-- [ ] Complete full CI, browser smoke and independent review before promoting this draft.
-
-Do not treat the adapters, IP auto-detection or end-to-end checks as production-verified until the unchecked items are completed.
+- [x] 前端直接调用 Globalping，不依赖独立后端。
+- [x] 自动读取所选 CFSM 实例公网 IPv4；失败时可手动填写。
+- [x] 只接受公网 IPv4，并校验 TCP 端口范围。
+- [x] 每次执行前重新读取在线探针列表，显示大陆三家 ASN 的实时探针覆盖。
+- [x] 家庭/企业宽带探针优先；无此类节点时回退并标注探针类型。
+- [x] 海外对照最多两个区域。
+- [x] 明确区分连接成功、目标拒绝、无响应和任务进行中。
+- [x] 不定时、不后台、不自动重跑。
+- [x] AntPing 网页复核链接。
+- [ ] 在用户的 CFSM 实际环境完成一次真实端到端测试；Globalping 探针覆盖和运营商表现以使用时 API 实时返回为准。
