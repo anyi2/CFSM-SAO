@@ -127,7 +127,7 @@ function rowsFromResult(task: ProbeTask, result: ProbeResult): ResultRow[] {
 
   if (task.provider === "boce") {
     const list = Array.isArray(raw.list) ? raw.list : [];
-    const rows = list.map((entry, index) => {
+    const rows: ResultRow[] = list.map((entry, index) => {
       const item = asRecord(entry);
       const loss = finiteNumber(item.packet_loss);
       const latency = finiteNumber(item.round_trip_avg);
