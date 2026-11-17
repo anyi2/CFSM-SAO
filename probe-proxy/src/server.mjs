@@ -270,7 +270,7 @@ async function handler(req, res) {
     }
     return json(res, 404, { error: "Not found" });
   } catch (error) {
-    return json(Number.isInteger(error?.status) ? error.status : 400, 400, { error: error instanceof Error ? error.message : "请求失败" });
+    return json(res, Number.isInteger(error?.status) ? error.status : 400, { error: error instanceof Error ? error.message : "请求失败" });
   }
 }
 
