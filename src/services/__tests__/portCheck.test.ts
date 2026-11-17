@@ -103,8 +103,7 @@ describe("parsePortCheckRows", () => {
 
 describe("runPortCheck", () => {
   it("submits a single manual check and polls its report", async () => {
-    const fetchMock = vi
-      .fn()
+    const fetchMock = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(
         jsonResponse({
           success: true,
@@ -138,8 +137,8 @@ describe("runPortCheck", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.check-host.cc/tcp");
-    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
-    expect(JSON.parse(String(request.body))).toMatchObject({
+    const request = fetchMock.mock.calls[0]?.[1];
+    expect(JSON.parse(String(request?.body))).toMatchObject({
       target: "1.1.1.1",
       port: 443,
       repeatchecks: 0,
@@ -151,7 +150,7 @@ describe("runPortCheck", () => {
   });
 
   it("rejects a private target before making an external request", async () => {
-    const fetchMock = vi.fn();
+    const fetchMock = vi.fn<typeof fetch>();
     vi.stubGlobal("fetch", fetchMock);
     await expect(
       runPortCheck({
