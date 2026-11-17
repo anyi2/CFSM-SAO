@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { InstancePanel } from "./InstancePanel";
 import {
-  createProbeTask, getCurrentNodePublicIpv4, getProbeNodes, getProbeProxyConfig,
+  createProbeTask, getCurrentNodePublicIpv4, getProbeNodes, getProbeProxyConfig, getProbeQuota,
   getProbeResult, saveProbeProxyConfig,
   type ProbeMode, type ProbeNode, type ProbeProviderId, type ProbeProxyConfig,
   type ProbeResult, type ProbeTask,
@@ -169,6 +169,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
   const [mode, setMode] = useState<ProbeMode>("ping");
   const [portText, setPortText] = useState("443");
   const [nodes, setNodes] = useState<Partial<Record<ProbeProviderId, ProbeNode[]>>>({});
+  const [quotaStatus, setQuotaStatus] = useState<Partial<Record<ProbeProviderId, string>>>({});
   const [selected, setSelected] = useState<Partial<Record<ProbeProviderId, string[]>>>({});
   const [enabled, setEnabled] = useState<Record<ProbeProviderId, boolean>>({
     tcptest: true, boce: true, "check-host": true,
@@ -217,11 +218,22 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
     setLoadingNodes(true);
     setError("");
     setProviderErrors({});
+    setQuotaStatus({});
     try {
       const entries = await Promise.all(PROVIDERS.map(async (provider) => {
         try {
-          const list = await getProbeNodes(nextConfig, provider.id);
+          const [list, quota] = await Promise.all([
+            getProbeNodes(nextConfig, provider.id),
+            getProbeQuota(nextConfig, provider.id).catch(() => null),
+          ]);
           const mainland = list.filter((node) => node.countryCode.toUpperCase() === "CN" || ["中国", "china", "cn"].includes(node.country.trim().toLowerCase()));
+          if (quota) {
+            const payload = asRecord(quota.quota);
+            const nested = asRecord(payload.data);
+            const remaining = payload.remaining ?? payload.available ?? payload.quota ?? nested.remaining ?? nested.available ?? nested.quota;
+            const message = typeof payload.message === "string" ? payload.message : "";
+            setQuotaStatus((current) => ({ ...current, [provider.id]: remaining != null ? `可用额度：${String(remaining)}` : message || "额度信息未由接口公开" }));
+          }
           return [provider.id, mainland] as const;
         } catch (caught) {
           setProviderErrors((current) => ({ ...current, [provider.id]: caught instanceof Error ? caught.message : "节点获取失败" }));
@@ -362,6 +374,8 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
                 </label>
                 <p className="mt-1 text-[10px] text-(--text-tertiary)">{provider.note}</p>
                 <div className="mt-2 text-[10px] text-(--text-secondary)">大陆节点 {list.length} · 已选 {count}</div>
+                {quotaStatus[provider.id] && <div className="mt-1 text-[9px] text-(--text-tertiary)">{quotaStatus[provider.id]}</div>}
+                {!quotaStatus[provider.id] && <div className="mt-1 text-[9px] text-(--text-tertiary)">额度：需在平台控制台确认</div>}
                 <div className="mt-2 flex gap-2">
                   <button type="button" disabled={!list.length} onClick={() => selectNodes(provider.id, true)} className="text-[10px] font-semibold text-(--accent-500) disabled:opacity-40">选前 30 个</button>
                   <button type="button" disabled={!count} onClick={() => selectNodes(provider.id, false)} className="text-[10px] text-(--text-tertiary) disabled:opacity-40">清空</button>
