@@ -198,7 +198,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
 
   const selectedCount = useMemo(
     () => PROVIDERS.reduce((total, provider) => total + (enabled[provider.id] ? (selected[provider.id]?.length || 0) : 0), 0),
-    [selected],
+    [enabled, selected],
   );
 
   function persistConfig() {
