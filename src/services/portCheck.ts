@@ -281,6 +281,8 @@ export async function runPortCheck(
 
   const reportUrl = `https://check-host.cc/report/${encodeURIComponent(dispatch.uuid)}`;
   let rows: PortCheckResultRow[] = [];
+  let previousSignature = "";
+  let stableSamples = 0;
 
   for (let attempt = 0; attempt < REPORT_POLL_ATTEMPTS; attempt += 1) {
     throwIfAborted(signal);
@@ -293,15 +295,26 @@ export async function runPortCheck(
     if (report.error && !report.data) throw new Error(report.error);
     rows = parsePortCheckRows(report.data);
     if (rows.length > 0) {
-      return {
-        uuid: dispatch.uuid,
-        target,
-        port,
-        protocol,
-        reportUrl,
-        rows,
-        pending: false,
-      };
+      const signature = JSON.stringify(rows);
+      if (signature === previousSignature) {
+        stableSamples += 1;
+      } else {
+        previousSignature = signature;
+        stableSamples = 0;
+      }
+      // Each location reports independently. Wait for a short quiet period so the
+      // first fast probe does not make the worldwide result look prematurely complete.
+      if (stableSamples >= 2) {
+        return {
+          uuid: dispatch.uuid,
+          target,
+          port,
+          protocol,
+          reportUrl,
+          rows,
+          pending: false,
+        };
+      }
     }
   }
 
