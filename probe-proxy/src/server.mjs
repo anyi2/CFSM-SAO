@@ -243,7 +243,8 @@ async function handler(req, res) {
     if (req.method === "GET" && resultMatch) {
       const [, provider, taskId] = resultMatch;
       const task = jobs.get(`${provider}:${taskId}`);
-      if (!task) return json(res, 404, { error: "任务不存在或代理重启后任务记录已过期" });\n      const result = await getResult(provider, taskId, task.mode);
+      if (!task) return json(res, 404, { error: "任务不存在或代理重启后任务记录已过期" });
+      const result = await getResult(provider, taskId, task.mode);
       return json(res, 200, { ...task, ...result });
     }
     return json(res, 404, { error: "Not found" });
