@@ -379,7 +379,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
     setTasks(activeTasks);
     if (!activeTasks.length) { setRunning(false); setError("所有平台任务提交失败，请检查 API 配置与额度。"); return; }
 
-    let latest: Partial<Record<ProbeProviderId, ProbeResult>> = {};
+    const latest: Partial<Record<ProbeProviderId, ProbeResult>> = {};
     for (let attempt = 0; attempt < 12; attempt += 1) {
       const settled = await Promise.all(activeTasks.map(async (task) => {
         try { return await getProbeResult(config, task.provider, task.taskId); }
