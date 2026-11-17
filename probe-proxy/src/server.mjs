@@ -275,6 +275,9 @@ async function getResult(provider, taskId, mode = "ping", task = null) {
     const url = new URL(`https://api.boce.com/v3/task/${mode === "tcp" ? "tcping" : "ping"}/${encodeURIComponent(taskId)}`);
     url.searchParams.set("key", process.env.BOCE_API_KEY);
     const result = await upstream(url);
+    if (result?.error_code != null && Number(result.error_code) !== 0) {
+      throw new HttpError(result.error || `BOCE 查询任务失败（错误码 ${result.error_code}）`, 502);
+    }
     return { provider, taskId, pending: result.done !== true, raw: result };
   }
   const base = `https://www.tcptest.cn/api/open/v1/tasks/${encodeURIComponent(taskId)}`;
