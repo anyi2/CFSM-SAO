@@ -10,7 +10,13 @@ export const CARRIER_ASNS = [
   { id: "mobile", name: "中国移动", asn: 9808 },
 ] as const;
 
-const OVERSEAS_COUNTRY_PRIORITY = ["JP", "SG", "US", "DE"] as const;
+export const OVERSEAS_COUNTRIES = [
+  { code: "JP", name: "日本" },
+  { code: "HK", name: "香港" },
+  { code: "US", name: "美国" },
+] as const;
+
+export type NetworkProbeProtocol = "ICMP" | "TCP" | "UDP";
 
 export interface GlobalpingProbe {
   location?: {
@@ -35,16 +41,16 @@ export interface GlobalpingLocation {
   country: string;
   asn?: number;
   tags?: string[];
-  limit: number;
+  limit: 1;
 }
 
 export interface GlobalpingMeasurementRequest {
-  type: "ping";
+  type: "ping" | "mtr";
   target: string;
   locations: GlobalpingLocation[];
   measurementOptions: {
-    protocol: "TCP";
-    port: number;
+    protocol: NetworkProbeProtocol;
+    port?: number;
     packets: number;
   };
 }
@@ -146,16 +152,21 @@ export function getCarrierProbeCoverage(probes: GlobalpingProbe[]): ProbeCoverag
 }
 
 /**
- * Prefer eyeball ISP probes for mainland tests; fall back to other probes
- * in the same carrier ASN when no eyeball probe is online.
+ * Select exactly one probe for each available mainland carrier and overseas
+ * control country. The API may return fewer results if a probe goes offline
+ * between discovery and measurement.
  */
 export function buildGlobalpingMeasurementRequest(
   target: string,
   port: number,
   probes: GlobalpingProbe[],
+  protocol: NetworkProbeProtocol = "TCP",
 ): GlobalpingMeasurementRequest {
   if (!isPublicIpv4(target)) throw new Error("请输入有效的公网 IPv4 地址");
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("端口必须在 1–65535 之间");
+  if (!["ICMP", "TCP", "UDP"].includes(protocol)) throw new Error("请选择 ICMP、TCP 或 UDP 检测协议");
+  if (protocol !== "ICMP" && (!Number.isInteger(port) || port < 1 || port > 65535)) {
+    throw new Error("目标端口必须在 1–65535 之间");
+  }
 
   const locations: GlobalpingLocation[] = [];
   for (const carrier of CARRIER_ASNS) {
@@ -163,43 +174,47 @@ export function buildGlobalpingMeasurementRequest(
       probe.location?.country === "CN" && Number(probe.location?.asn) === carrier.asn
     );
     if (!matches.length) continue;
+
     const eyeball = matches.filter((probe) => (probe.tags || []).includes("eyeball-network"));
     const useEyeball = eyeball.length > 0;
-    const candidates = useEyeball ? eyeball : matches;
     locations.push({
       country: "CN",
       asn: carrier.asn,
       ...(useEyeball ? { tags: ["eyeball-network"] } : {}),
-      limit: Math.min(2, candidates.length),
+      limit: 1,
     });
   }
 
   const availableCountries = new Set(
-    probes.map((probe) => probe.location?.country).filter((country): country is string => Boolean(country) && country !== "CN"),
+    probes
+      .map((probe) => probe.location?.country)
+      .filter((country): country is string => Boolean(country)),
   );
-  let overseasCount = 0;
-  for (const country of OVERSEAS_COUNTRY_PRIORITY) {
-    if (!availableCountries.has(country)) continue;
-    const countryProbes = probes.filter((probe) => probe.location?.country === country);
-    const datacenter = countryProbes.filter((probe) => (probe.tags || []).includes("datacenter-network"));
+  for (const country of OVERSEAS_COUNTRIES) {
+    if (!availableCountries.has(country.code)) continue;
+    const countryProbes = probes.filter((probe) => probe.location?.country === country.code);
+    const datacenter = countryProbes.some((probe) => (probe.tags || []).includes("datacenter-network"));
     locations.push({
-      country,
-      ...(datacenter.length > 0 ? { tags: ["datacenter-network"] } : {}),
+      country: country.code,
+      ...(datacenter ? { tags: ["datacenter-network"] } : {}),
       limit: 1,
     });
-    overseasCount += 1;
-    if (overseasCount >= 2) break;
   }
 
   if (!locations.some((location) => typeof location.asn === "number")) {
-    throw new Error("Globalping 当前没有中国电信、联通或移动 ASN 的在线探针。请使用 AntPing 进行大陆三网复核。");
+    throw new Error("Globalping 当前没有中国电信、联通或移动 ASN 的在线探针。请稍后重试，或使用 AntPing 人工复核。");
   }
 
   return {
-    type: "ping",
+    // Globalping ping supports ICMP and TCP. UDP is supported by MTR instead.
+    type: protocol === "UDP" ? "mtr" : "ping",
     target,
     locations,
-    measurementOptions: { protocol: "TCP", port, packets: 3 },
+    measurementOptions: {
+      protocol,
+      ...(protocol === "ICMP" ? {} : { port }),
+      packets: 3,
+    },
   };
 }
 
@@ -299,8 +314,15 @@ function numeric(value: unknown): number | null {
   return null;
 }
 
-function probeCarrier(asn: number): string {
-  return CARRIER_ASNS.find((carrier) => carrier.asn === asn)?.name || (asn ? "其他网络" : "未知运营商");
+function resultCarrier(asn: number, country: string): string | null {
+  const carrier = CARRIER_ASNS.find((item) => item.asn === asn);
+  if (country === "CN") return carrier?.name || null;
+  return OVERSEAS_COUNTRIES.find((item) => item.code === country)?.name || null;
+}
+
+function resultKey(asn: number, country: string): string | null {
+  if (country === "CN") return CARRIER_ASNS.some((item) => item.asn === asn) ? "asn:" + asn : null;
+  return OVERSEAS_COUNTRIES.some((item) => item.code === country) ? "country:" + country : null;
 }
 
 function rawOutputSummary(value: unknown): string {
@@ -309,35 +331,94 @@ function rawOutputSummary(value: unknown): string {
   return (lines.at(-1) || lines[0] || "").slice(0, 180);
 }
 
-export function parseGlobalpingMeasurement(payload: Record<string, unknown>): GlobalpingResultRow[] {
+function rowPriority(row: GlobalpingResultRow): number {
+  const status = { success: 5, rejected: 4, pending: 3, failed: 2, unknown: 1 }[row.status];
+  const probe = row.probeType === "家庭/企业宽带" ? 2 : row.probeType === "数据中心" ? 1 : 0;
+  const latency = row.latencyMs == null ? 0 : Math.max(0, 1000 - Math.min(row.latencyMs, 1000)) / 1000;
+  return status * 10 + probe + latency;
+}
+
+function orderResultRows(rows: GlobalpingResultRow[]): GlobalpingResultRow[] {
+  const order = [
+    ...CARRIER_ASNS.map((carrier) => "asn:" + carrier.asn),
+    ...OVERSEAS_COUNTRIES.map((country) => "country:" + country.code),
+  ];
+  return [...rows].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+}
+
+/**
+ * Normalize results to one row per requested carrier/country, even if an API
+ * response unexpectedly contains more than one result for a location.
+ */
+export function parseGlobalpingMeasurement(
+  payload: Record<string, unknown>,
+  protocol: NetworkProbeProtocol = "TCP",
+): GlobalpingResultRow[] {
   const results = Array.isArray(payload.results) ? payload.results : [];
-  return results.map((entry, index) => {
+  const uniqueRows = new Map<string, GlobalpingResultRow>();
+
+  results.forEach((entry) => {
     const item = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
     const probe = item.probe && typeof item.probe === "object" ? item.probe as Record<string, unknown> : {};
     const result = item.result && typeof item.result === "object" ? item.result as Record<string, unknown> : {};
     const asn = Number(probe.asn) || 0;
+    const country = String(probe.country || "");
+    const key = resultKey(asn, country);
+    const carrier = resultCarrier(asn, country);
+    if (!key || !carrier) return;
+
     const tags = Array.isArray(probe.tags) ? probe.tags.map(String) : [];
     const timings = Array.isArray(result.timings) ? result.timings : [];
     const samples = timings
       .map((timing) => timing && typeof timing === "object" ? numeric((timing as Record<string, unknown>).rtt) : null)
       .filter((sample): sample is number => sample !== null);
     const stats = result.stats && typeof result.stats === "object" ? result.stats as Record<string, unknown> : {};
-    const latency = numeric(stats.avg) ?? (samples.length ? samples.reduce((sum, value) => sum + value, 0) / samples.length : null);
+    const hops = Array.isArray(result.hops) ? result.hops : [];
+    const respondingHops = hops.filter((hop) => {
+      if (!hop || typeof hop !== "object") return false;
+      const hopRecord = hop as Record<string, unknown>;
+      const hopStats = hopRecord.stats && typeof hopRecord.stats === "object"
+        ? hopRecord.stats as Record<string, unknown>
+        : {};
+      const hopTimings = Array.isArray(hopRecord.timings) ? hopRecord.timings : [];
+      return (numeric(hopStats.rcv) || 0) > 0 || hopTimings.some((timing) =>
+        Boolean(timing && typeof timing === "object" && numeric((timing as Record<string, unknown>).rtt) !== null)
+      );
+    });
+    const targetAddress = String(result.resolvedAddress || "");
+    const targetHop = respondingHops.find((hop) =>
+      hop && typeof hop === "object" && String((hop as Record<string, unknown>).resolvedAddress || "") === targetAddress
+    );
+    const lastRespondingHop = respondingHops.at(-1);
+    const targetHopStats = targetHop && typeof targetHop === "object" && (targetHop as Record<string, unknown>).stats
+      ? (targetHop as Record<string, unknown>).stats as Record<string, unknown>
+      : null;
+    const lastHopStats = lastRespondingHop && typeof lastRespondingHop === "object" && (lastRespondingHop as Record<string, unknown>).stats
+      ? (lastRespondingHop as Record<string, unknown>).stats as Record<string, unknown>
+      : null;
+    const latency = protocol === "UDP"
+      ? numeric(targetHopStats?.avg) ?? numeric(lastHopStats?.avg)
+      : numeric(stats.avg) ?? (samples.length ? samples.reduce((sum, value) => sum + value, 0) / samples.length : null);
+
     const rawOutput = String(result.rawOutput || "");
-    const rejected = /connection refused|connection reset|actively refused|port is closed/i.test(rawOutput);
+    const unreachable = /port unreachable|destination (?:host|network) unreachable|host unreachable|network unreachable|administratively prohibited|!X|!H|!N/i.test(rawOutput);
     const resultStatus = String(result.status || "");
     const pending = resultStatus === "in-progress";
+    const hasResponse = protocol === "UDP" ? respondingHops.length > 0 : samples.length > 0 || latency !== null;
+    const rejected = protocol === "TCP"
+      ? /connection refused|connection reset|actively refused|port is closed/i.test(rawOutput)
+      : unreachable;
     const status: GlobalpingResultRow["status"] = pending
       ? "pending"
       : rejected
         ? "rejected"
-        : samples.length > 0 || latency !== null
+        : hasResponse
           ? "success"
           : resultStatus === "finished" || resultStatus === "failed" || resultStatus === "offline"
             ? "failed"
             : "unknown";
+
     const city = String(probe.city || "");
-    const country = String(probe.country || "");
     const network = String(probe.network || "");
     const probeType = tags.includes("eyeball-network")
       ? "家庭/企业宽带"
@@ -346,16 +427,21 @@ export function parseGlobalpingMeasurement(payload: Record<string, unknown>): Gl
         : "未分类";
 
     let detail = rawOutputSummary(result.rawOutput);
-    if (!detail) {
-      detail = status === "success" ? "TCP 探测收到响应"
-        : status === "rejected" ? "目标返回拒绝或重置"
-          : status === "failed" ? "没有收到 TCP 响应"
+    if (protocol === "UDP" && status === "success") {
+      detail = "UDP 路径收到 " + respondingHops.length + " 个响应节点；不代表服务端口已开放";
+    } else if (!detail) {
+      detail = status === "success"
+        ? protocol + " 收到响应"
+        : status === "rejected"
+          ? protocol + " 探测收到拒绝/不可达响应"
+          : status === "failed"
+            ? protocol + " 未收到响应"
             : status === "pending" ? "检测进行中" : "结果暂不可用";
     }
 
-    return {
-      id: String(probe.asn || "probe") + "-" + country + "-" + city + "-" + index,
-      carrier: probeCarrier(asn),
+    const row: GlobalpingResultRow = {
+      id: key,
+      carrier,
       asn,
       country,
       city,
@@ -365,5 +451,9 @@ export function parseGlobalpingMeasurement(payload: Record<string, unknown>): Gl
       latencyMs: latency,
       detail,
     };
+    const previous = uniqueRows.get(key);
+    if (!previous || rowPriority(row) > rowPriority(previous)) uniqueRows.set(key, row);
   });
+
+  return orderResultRows([...uniqueRows.values()]);
 }

@@ -74,14 +74,17 @@ describe("findServerIpv4", () => {
   });
 });
 
-describe("Globalping probe coverage", () => {
+describe("Globalping probe coverage and location selection", () => {
   const probes = [
     { location: { country: "CN", asn: 4134, city: "Guangzhou", network: "China Telecom" }, tags: ["eyeball-network"] },
     { location: { country: "CN", asn: 4134, city: "Beijing", network: "China Telecom DC" }, tags: ["datacenter-network"] },
     { location: { country: "CN", asn: 4837, city: "Wuhan", network: "China Unicom" }, tags: ["datacenter-network"] },
     { location: { country: "CN", asn: 9808, city: "Nanning", network: "China Mobile" }, tags: ["eyeball-network"] },
     { location: { country: "JP", asn: 2516, city: "Tokyo", network: "KDDI" }, tags: ["datacenter-network"] },
+    { location: { country: "HK", asn: 45102, city: "Hong Kong", network: "Alibaba" }, tags: ["datacenter-network"] },
+    { location: { country: "US", asn: 13335, city: "Los Angeles", network: "Cloudflare" }, tags: ["datacenter-network"] },
     { location: { country: "SG", asn: 45102, city: "Singapore", network: "Alibaba" }, tags: ["datacenter-network"] },
+    { location: { country: "DE", asn: 3320, city: "Berlin", network: "Deutsche Telekom" }, tags: ["eyeball-network"] },
     { location: { country: "CN", asn: 9999, city: "Shenzhen", network: "Other" }, tags: ["datacenter-network"] },
   ];
 
@@ -93,7 +96,7 @@ describe("Globalping probe coverage", () => {
     ]);
   });
 
-  it("prioritizes eyeball probes and falls back to datacenter probes per carrier", () => {
+  it("selects one probe per mainland carrier and only Japan, Hong Kong and US overseas", () => {
     const request = buildGlobalpingMeasurementRequest("45.67.89.10", 443, probes);
     expect(request.type).toBe("ping");
     expect(request.measurementOptions).toEqual({ protocol: "TCP", port: 443, packets: 3 });
@@ -102,19 +105,34 @@ describe("Globalping probe coverage", () => {
       { country: "CN", asn: 4837, limit: 1 },
       { country: "CN", asn: 9808, tags: ["eyeball-network"], limit: 1 },
       { country: "JP", tags: ["datacenter-network"], limit: 1 },
-      { country: "SG", tags: ["datacenter-network"], limit: 1 },
+      { country: "HK", tags: ["datacenter-network"], limit: 1 },
+      { country: "US", tags: ["datacenter-network"], limit: 1 },
     ]);
+    expect(request.locations).toHaveLength(6);
   });
 
-  it("does not start a measurement when no target carrier probes are online", () => {
+  it("builds ICMP ping without requiring or sending a destination port", () => {
+    const request = buildGlobalpingMeasurementRequest("45.67.89.10", 0, probes, "ICMP");
+    expect(request.type).toBe("ping");
+    expect(request.measurementOptions).toEqual({ protocol: "ICMP", packets: 3 });
+  });
+
+  it("uses Globalping MTR for UDP because ping only supports ICMP and TCP", () => {
+    const request = buildGlobalpingMeasurementRequest("45.67.89.10", 53, probes, "UDP");
+    expect(request.type).toBe("mtr");
+    expect(request.measurementOptions).toEqual({ protocol: "UDP", port: 53, packets: 3 });
+  });
+
+  it("does not start a measurement when no mainland carrier probes are online", () => {
     expect(() => buildGlobalpingMeasurementRequest("45.67.89.10", 443, [
       { location: { country: "JP", asn: 2516 }, tags: ["datacenter-network"] },
     ])).toThrow(/没有中国电信、联通或移动 ASN/);
   });
 
-  it("rejects unsafe targets and invalid ports", () => {
+  it("rejects unsafe targets and invalid TCP/UDP ports", () => {
     expect(() => buildGlobalpingMeasurementRequest("192.168.1.1", 443, probes)).toThrow(/公网 IPv4/);
-    expect(() => buildGlobalpingMeasurementRequest("45.67.89.10", 0, probes)).toThrow(/端口/);
+    expect(() => buildGlobalpingMeasurementRequest("45.67.89.10", 0, probes, "TCP")).toThrow(/端口/);
+    expect(() => buildGlobalpingMeasurementRequest("45.67.89.10", 65536, probes, "UDP")).toThrow(/端口/);
   });
 });
 
@@ -147,7 +165,7 @@ describe("parseGlobalpingMeasurement", () => {
           },
         },
       ],
-    });
+    }, "TCP");
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({
       carrier: "中国电信", status: "success", latencyMs: 28.4, probeType: "家庭/企业宽带",
@@ -157,13 +175,75 @@ describe("parseGlobalpingMeasurement", () => {
     });
   });
 
+  it("parses ICMP timings and labels overseas countries by region", () => {
+    const rows = parseGlobalpingMeasurement({
+      results: [{
+        probe: { country: "JP", city: "Tokyo", asn: 2516, network: "Example ISP", tags: ["datacenter-network"] },
+        result: { status: "finished", rawOutput: "3 packets transmitted, 3 received", timings: [{ rtt: 18.2 }], stats: { avg: 18.2 } },
+      }],
+    }, "ICMP");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ carrier: "日本", id: "country:JP", status: "success", latencyMs: 18.2 });
+  });
+
+  it("parses UDP MTR output without claiming the UDP service is open", () => {
+    const rows = parseGlobalpingMeasurement({
+      results: [{
+        probe: { country: "HK", city: "Hong Kong", asn: 45102, network: "Example ISP", tags: ["datacenter-network"] },
+        result: {
+          status: "finished",
+          rawOutput: "mtr: complete",
+          resolvedAddress: "45.67.89.10",
+          hops: [
+            { resolvedAddress: "192.0.2.1", stats: { avg: 8, rcv: 3 }, timings: [{ rtt: 8 }] },
+            { resolvedAddress: "45.67.89.10", stats: { avg: 22.5, rcv: 3 }, timings: [{ rtt: 22.5 }] },
+          ],
+        },
+      }],
+    }, "UDP");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      carrier: "香港",
+      status: "success",
+      latencyMs: 22.5,
+      detail: expect.stringContaining("不代表服务端口已开放"),
+    });
+  });
+
+  it("deduplicates multiple results for the same carrier and country", () => {
+    const rows = parseGlobalpingMeasurement({
+      results: [
+        {
+          probe: { country: "CN", city: "Beijing", asn: 4134, network: "Telecom DC", tags: ["datacenter-network"] },
+          result: { status: "finished", rawOutput: "no response", timings: [], stats: { avg: null } },
+        },
+        {
+          probe: { country: "CN", city: "Guangzhou", asn: 4134, network: "Telecom Home", tags: ["eyeball-network"] },
+          result: { status: "finished", rawOutput: "reply", timings: [{ rtt: 30 }], stats: { avg: 30 } },
+        },
+        {
+          probe: { country: "US", city: "Los Angeles", asn: 13335, network: "Cloudflare", tags: ["datacenter-network"] },
+          result: { status: "finished", rawOutput: "reply", timings: [{ rtt: 90 }], stats: { avg: 90 } },
+        },
+        {
+          probe: { country: "US", city: "New York", asn: 7922, network: "Comcast", tags: ["eyeball-network"] },
+          result: { status: "finished", rawOutput: "reply", timings: [{ rtt: 100 }], stats: { avg: 100 } },
+        },
+      ],
+    }, "TCP");
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.id)).toEqual(["asn:4134", "country:US"]);
+    expect(rows[0]).toMatchObject({ city: "Guangzhou", status: "success" });
+    expect(rows[1]).toMatchObject({ city: "New York", probeType: "家庭/企业宽带" });
+  });
+
   it("keeps in-progress results distinct from failures", () => {
     const rows = parseGlobalpingMeasurement({
       results: [{
         probe: { country: "CN", city: "Shanghai", asn: 9808, tags: [] },
         result: { status: "in-progress", rawOutput: "" },
       }],
-    });
+    }, "ICMP");
     expect(rows[0]?.status).toBe("pending");
   });
 });

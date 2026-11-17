@@ -14,17 +14,24 @@ import {
   isPublicIpv4,
   parseGlobalpingMeasurement,
   type GlobalpingResultRow,
+  type NetworkProbeProtocol,
   type ProbeCoverage,
 } from "@/services/networkProbe";
+
+const PROTOCOL_OPTIONS: Array<{ value: NetworkProbeProtocol; label: string; hint: string }> = [
+  { value: "ICMP", label: "ICMP", hint: "Ping 连通性" },
+  { value: "TCP", label: "TCP", hint: "指定端口连通性" },
+  { value: "UDP", label: "UDP", hint: "UDP 路径探测" },
+];
 
 function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 }
 
-function statusLabel(status: GlobalpingResultRow["status"]): string {
-  if (status === "success") return "TCP 有响应";
-  if (status === "rejected") return "目标拒绝/重置";
-  if (status === "failed") return "无 TCP 响应";
+function statusLabel(status: GlobalpingResultRow["status"], protocol: NetworkProbeProtocol): string {
+  if (status === "success") return protocol === "UDP" ? "UDP 路径有响应" : protocol + " 有响应";
+  if (status === "rejected") return protocol === "UDP" ? "收到不可达提示" : "目标拒绝/不可达";
+  if (status === "failed") return protocol === "UDP" ? "未收到 UDP 路径响应" : protocol + " 无响应";
   if (status === "pending") return "检测中";
   return "结果未知";
 }
@@ -44,7 +51,7 @@ function CoverageText({ coverage }: { coverage: ProbeCoverage[] }) {
           <div className="text-[11px] font-semibold text-(--text-primary)">{item.name}</div>
           <div className="mt-1 text-[10px] text-(--text-tertiary)">AS{item.asn} · 在线探针 {item.total}</div>
           <div className="mt-1 text-[10px] text-(--text-secondary)">
-            宽带探针 {item.eyeball} · 数据中心 {item.datacenter}
+            宽带 {item.eyeball} · 数据中心 {item.datacenter}
           </div>
         </div>
       ))}
@@ -55,6 +62,7 @@ function CoverageText({ coverage }: { coverage: ProbeCoverage[] }) {
 export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; nodeUuid: string }) {
   const [target, setTarget] = useState("");
   const [targetStatus, setTargetStatus] = useState("正在读取当前实例公网 IPv4…");
+  const [protocol, setProtocol] = useState<NetworkProbeProtocol>("TCP");
   const [portText, setPortText] = useState("443");
   const [coverage, setCoverage] = useState<ProbeCoverage[] | null>(null);
   const [rows, setRows] = useState<GlobalpingResultRow[]>([]);
@@ -95,8 +103,8 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
       setError("请填写当前服务器真实的公网 IPv4 地址。不要填写经过 Cloudflare 代理的域名。");
       return;
     }
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      setError("TCP 端口必须是 1–65535 之间的整数。");
+    if (protocol !== "ICMP" && (!Number.isInteger(port) || port < 1 || port > 65535)) {
+      setError("TCP / UDP 目标端口必须是 1–65535 之间的整数。");
       return;
     }
 
@@ -115,13 +123,13 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
       const currentCoverage = getCarrierProbeCoverage(probes);
       setCoverage(currentCoverage);
 
-      const request = buildGlobalpingMeasurementRequest(ip, port, probes);
-      const plannedCount = request.locations.reduce((sum, location) => sum + location.limit, 0);
-      setStatusText("正在向 " + request.locations.length + " 组探测区域提交任务…");
+      const request = buildGlobalpingMeasurementRequest(ip, port, probes, protocol);
+      const plannedCount = request.locations.length;
+      setStatusText("正在向 " + plannedCount + " 个目标位置提交 " + protocol + " 任务…");
       const task = await createGlobalpingMeasurement(request, controller.signal);
       if (controller.signal.aborted) return;
       setProbeCount(task.probesCount);
-      setStatusText("任务已提交，实际分配 " + task.probesCount + " 个探针（计划最多 " + plannedCount + " 个），正在等待结果…");
+      setStatusText("任务已提交，实际分配 " + task.probesCount + " 个探针（最多 " + plannedCount + " 个），正在等待结果…");
 
       let latestRows: GlobalpingResultRow[] = [];
       let finished = false;
@@ -129,18 +137,18 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
         if (controller.signal.aborted) return;
         if (attempt > 0) await wait(2000);
         const measurement = await getGlobalpingMeasurement(task.id, controller.signal);
-        latestRows = parseGlobalpingMeasurement(measurement);
+        latestRows = parseGlobalpingMeasurement(measurement, protocol);
         setRows(latestRows);
         if (measurement.status === "finished") {
           finished = true;
           break;
         }
-        setStatusText("检测进行中…已收到 " + latestRows.length + " 条节点结果");
+        setStatusText("检测进行中…已收到 " + latestRows.length + " 个不同运营商/地区的结果");
       }
       if (controller.signal.aborted) return;
       setStatusText(finished
-        ? "检测完成 · " + latestRows.length + " 条结果"
-        : "检测仍在进行，当前已返回 " + latestRows.length + " 条结果；可稍后重新检测");
+        ? "检测完成 · " + latestRows.length + " 个唯一位置"
+        : "检测仍在进行，当前已返回 " + latestRows.length + " 个唯一位置；可稍后重新检测");
     } catch (caught) {
       if (controller.signal.aborted) return;
       setError(caught instanceof Error ? caught.message : "网络检测失败，请稍后重试。");
@@ -150,17 +158,52 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
     }
   }
 
+  const needsPort = protocol !== "ICMP";
+
   return (
     <InstancePanel
       id="instance-network-probes"
-      title="大陆 TCP 端口检测"
+      title="跨区域网络检测"
       kicker={<span className="inline-flex items-center gap-1.5"><Activity size={12} />管理员工具</span>}
       titleAction={<span className="rounded-full border border-(--hairline) px-2.5 py-1 text-[10px] font-semibold text-(--text-tertiary)">免费 API</span>}
-      description={<>{nodeName ? "当前实例：" + nodeName + "。 " : ""}从中国电信、联通、移动网络探测指定 TCP 端口，并用海外节点作对照。检测由 Globalping 社区在线探针执行，不代表运营商官方测量。</>}
+      description={<>{nodeName ? "当前实例：" + nodeName + "。 " : ""}支持 ICMP、TCP、UDP 三种检测；大陆电信、联通、移动各选一个探针，海外只选日本、香港、美国各一个，不重复展示同一运营商或地区。</>}
       className="instance-network-probe-panel"
     >
       <div className="flex flex-col gap-3">
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(120px,0.6fr)]">
+        <div className="flex flex-col gap-1.5">
+          <div className="text-[11px] font-semibold text-(--text-secondary)">检测协议</div>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-label="检测协议">
+            {PROTOCOL_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={protocol === option.value}
+                onClick={() => {
+                  setProtocol(option.value);
+                  setError("");
+                  setRows([]);
+                  setStatusText("");
+                }}
+                className={[
+                  "flex min-h-10 flex-col items-center justify-center rounded-xl border px-2 py-1.5 text-[11px] transition-colors",
+                  protocol === option.value
+                    ? "border-(--accent-500) bg-(--accent-500)/10 text-(--accent-500)"
+                    : "border-(--hairline) bg-(--surface-elev) text-(--text-secondary) hover:border-(--accent-500)",
+                ].join(" ")}
+              >
+                <span className="font-bold">{option.label}</span>
+                <span className="text-[9px] opacity-75">{option.hint}</span>
+              </button>
+            ))}
+          </div>
+          {protocol === "UDP" && (
+            <p className="text-[10px] leading-relaxed text-(--text-tertiary)">
+              UDP 使用 Globalping MTR 路径探测。路由节点有响应不等于目标 UDP 服务端口已开放；中间路由器也可能不返回探测包。
+            </p>
+          )}
+        </div>
+
+        <div className={["grid gap-3", needsPort ? "sm:grid-cols-[minmax(0,1.4fr)_minmax(120px,0.6fr)]" : "grid-cols-1"].join(" ")}>
           <label className="flex min-w-0 flex-col gap-1.5 text-[11px] font-semibold text-(--text-secondary)">
             目标公网 IPv4
             <input
@@ -177,21 +220,23 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
             />
             <span className="text-[10px] font-normal text-(--text-tertiary)">{targetStatus}</span>
           </label>
-          <label className="flex flex-col gap-1.5 text-[11px] font-semibold text-(--text-secondary)">
-            TCP 端口
-            <input
-              type="number"
-              min={1}
-              max={65535}
-              value={portText}
-              onChange={(event) => setPortText(event.target.value)}
-              className="min-h-10 rounded-xl border border-(--hairline) bg-(--surface-elev) px-3 font-mono text-[12px] text-(--text-primary)"
-            />
-          </label>
+          {needsPort && (
+            <label className="flex flex-col gap-1.5 text-[11px] font-semibold text-(--text-secondary)">
+              {protocol} 目标端口
+              <input
+                type="number"
+                min={1}
+                max={65535}
+                value={portText}
+                onChange={(event) => setPortText(event.target.value)}
+                className="min-h-10 rounded-xl border border-(--hairline) bg-(--surface-elev) px-3 font-mono text-[12px] text-(--text-primary)"
+              />
+            </label>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {[22, 80, 443, 8443, 10443].map((port) => (
+          {needsPort && [22, 53, 80, 443, 8443, 10443].map((port) => (
             <button
               key={port}
               type="button"
@@ -204,22 +249,22 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
           <button
             type="button"
             onClick={() => void runCheck()}
-            disabled={running || !target.trim() || !portText.trim()}
+            disabled={running || !target.trim() || (needsPort && !portText.trim())}
             className="ml-auto inline-flex min-h-9 items-center gap-2 rounded-xl bg-(--accent-500) px-4 text-[11px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {running ? <LoaderCircle size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-            {running ? "正在检测…" : "开始 TCP 检测"}
+            {running ? "正在检测…" : "开始 " + protocol + " 检测"}
           </button>
         </div>
 
         <div className="flex items-start gap-2 rounded-xl border border-(--hairline) bg-(--surface-elev) px-3 py-2.5 text-[10px] leading-relaxed text-(--text-tertiary)">
           <CircleHelp size={13} className="mt-0.5 shrink-0" />
-          <span>每次点击才发起一次检测，不进行后台巡检。优先选择 ISP 的家庭/企业宽带探针；没有时使用该运营商 ASN 下其他在线探针。在线节点数量会随社区设备状态变化。</span>
+          <span>每次点击才发起一次检测，不进行后台巡检。每个大陆运营商和海外地区最多选一个在线探针；大陆优先家庭/企业宽带，没有时回退同 ASN 其他探针并标注类型。最多六个探针，实际数量取决于在线情况。</span>
         </div>
 
         {coverage && (
           <div className="flex flex-col gap-2">
-            <div className="text-[11px] font-semibold text-(--text-primary)">当前大陆运营商探针覆盖</div>
+            <div className="text-[11px] font-semibold text-(--text-primary)">大陆三网在线探针覆盖（可用数量，不是本次采样数量）</div>
             <CoverageText coverage={coverage} />
           </div>
         )}
@@ -255,7 +300,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
                   <th className="px-3 py-2">运营商 / 区域</th>
                   <th className="px-3 py-2">探针网络</th>
                   <th className="px-3 py-2">状态</th>
-                  <th className="px-3 py-2">TCP 响应</th>
+                  <th className="px-3 py-2">响应 / RTT</th>
                   <th className="px-3 py-2">说明</th>
                 </tr>
               </thead>
@@ -275,7 +320,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
                     <td className="px-3 py-2">
                       <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
                         <StatusIcon status={row.status} />
-                        {statusLabel(row.status)}
+                        {statusLabel(row.status, protocol)}
                       </span>
                     </td>
                     <td className="px-3 py-2 font-mono">
@@ -291,7 +336,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-(--hairline) pt-3">
           <p className="max-w-xl text-[10px] leading-relaxed text-(--text-tertiary)">
-            超时不等同于封禁。大陆节点失败而海外成功，说明大陆方向存在连通异常，应结合防火墙、端口监听及其他运营商复测。探测结果及目标 IP 会由 Globalping 处理。
+            超时不等同于封禁。ICMP 无响应不代表 TCP/UDP 端口不可用；TCP 拒绝/重置与超时含义不同；UDP 路径响应也不等于服务端口开放。请结合服务器监听、防火墙和不同线路复测。探测结果及目标 IP 会由 Globalping 处理。
           </p>
           <a
             href="https://antping.com/tcp"
