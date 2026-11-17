@@ -32,6 +32,7 @@ const TCP_PRESETS = [
   { port: 22, label: "SSH" },
   { port: 80, label: "HTTP" },
   { port: 443, label: "HTTPS" },
+  { port: 8443, label: "备用服务" },
   { port: 10443, label: "自定义服务" },
 ];
 
