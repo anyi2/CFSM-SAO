@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { InstancePanel } from "./InstancePanel";
 import {
-  createProbeTask, getCurrentNodePublicIpv4, getProbeNodes, getProbeProxyConfig, getProbeQuota,
+  createProbeTask, getCurrentNodePublicIpv4, getProbeNodes, getProbeProviders, getProbeProxyConfig, getProbeQuota,
   getProbeResult, saveProbeProxyConfig,
   type ProbeMode, type ProbeNode, type ProbeProviderId, type ProbeProviderInfo, type ProbeProxyConfig,
   type ProbeResult, type ProbeTask,
