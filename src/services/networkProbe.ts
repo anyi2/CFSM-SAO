@@ -177,7 +177,7 @@ export async function getProbeResult(
   );
 }
 
-function isPublicIpv4(value: unknown): value is string {
+export function isPublicIpv4(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const parts = value.trim().split(".");
   if (parts.length !== 4 || parts.some((part) => !/^(0|[1-9]\d{0,2})$/.test(part) || Number(part) > 255)) return false;
@@ -211,7 +211,7 @@ function findPublicIpv4InRecord(payload: unknown, depth = 0): string | null {
   return null;
 }
 
-function findServerIpv4(payload: unknown, uuid: string, depth = 0): string | null {
+export function findServerIpv4(payload: unknown, uuid: string, depth = 0): string | null {
   if (depth > 10 || payload == null || typeof payload !== "object") return null;
   if (Array.isArray(payload)) {
     for (const item of payload) {
