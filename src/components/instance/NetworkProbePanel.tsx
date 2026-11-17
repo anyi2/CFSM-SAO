@@ -228,7 +228,7 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
   }
 
   function selectNodes(provider: ProbeProviderId, all: boolean) {
-    const list = nodes[provider] || [];
+    const list: ProbeNode[] = nodes[provider] ?? [];
     setSelected((current) => ({
       ...current,
       [provider]: all ? list.slice(0, 30).map((node) => node.id) : [],
@@ -283,11 +283,6 @@ export function NetworkProbePanel({ nodeName, nodeUuid }: { nodeName?: string; n
     }
     setRunning(false);
   }
-
-  const allRows = tasks.flatMap((task) => {
-    const result = results[task.provider];
-    return result ? rowsFromResult(task, result) : [];
-  });
 
   return (
     <InstancePanel
