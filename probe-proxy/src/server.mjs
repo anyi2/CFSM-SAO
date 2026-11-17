@@ -12,7 +12,7 @@ const RESULT_TTL = Math.max(60000, Number(process.env.PROBE_RESULT_TTL_MS || 900
 const PROVIDERS = ["tcptest", "boce", "check-host"];
 const jobs = new Map();
 
-function json(res, status, body, headers = {}) {
+class HttpError extends Error {\n  constructor(message, status) { super(message); this.status = status; }\n}\n\nfunction json(res, status, body, headers = {}) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers });
   res.end(JSON.stringify(body));
 }
@@ -82,10 +82,10 @@ async function upstream(url, init = {}) {
     const text = await response.text();
     let payload;
     try { payload = JSON.parse(text); } catch { throw new Error("第三方服务返回非 JSON 数据"); }
-    if (!response.ok) throw new Error(payload?.error || payload?.message || `第三方服务 HTTP ${response.status}`);
+    if (!response.ok) throw new HttpError(payload?.error || payload?.message || `第三方服务 HTTP ${response.status}`, 502);
     return payload;
   } catch (error) {
-    if (error?.name === "AbortError") throw new Error("第三方服务请求超时");
+    if (error?.name === "AbortError") throw new HttpError("第三方服务请求超时", 504);
     throw error;
   } finally {
     clearTimeout(timer);
@@ -100,7 +100,7 @@ function providerReady(provider) {
 
 function requireProvider(provider) {
   if (!PROVIDERS.includes(provider)) throw new Error("未知检测平台");
-  if (!providerReady(provider)) throw new Error(`${provider} 尚未配置服务端 API Key`);
+  if (!providerReady(provider)) throw new HttpError(`${provider} 尚未配置服务端 API Key`, 503);
 }
 
 function tcptestHeaders() {
@@ -270,7 +270,7 @@ async function handler(req, res) {
     }
     return json(res, 404, { error: "Not found" });
   } catch (error) {
-    return json(res, 400, { error: error instanceof Error ? error.message : "请求失败" });
+    return json(Number.isInteger(error?.status) ? error.status : 400, 400, { error: error instanceof Error ? error.message : "请求失败" });
   }
 }
 
