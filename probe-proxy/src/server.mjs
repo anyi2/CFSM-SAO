@@ -5,11 +5,29 @@ const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || "127.0.0.1";
 const TOKEN = (process.env.PROBE_PROXY_TOKEN || "").trim();
 const ORIGINS = new Set((process.env.PROBE_ALLOWED_ORIGINS || "").split(",").map((v) => v.trim()).filter(Boolean));
-const MAX_NODES = Math.max(1, Math.min(100, Number(process.env.PROBE_MAX_NODES || 30)));
+const MAX_NODES = Math.max(1, Math.min(20, Number(process.env.PROBE_MAX_NODES || 6)));
 const REQUEST_TIMEOUT = Math.max(3000, Math.min(60000, Number(process.env.PROBE_REQUEST_TIMEOUT_MS || 15000)));
 const RESULT_TTL = Math.max(60000, Number(process.env.PROBE_RESULT_TTL_MS || 900000));
 
-const PROVIDERS = ["tcptest", "boce", "check-host"];
+const PROVIDER_METADATA = {
+  "check-host": {
+    requiresApiKey: false,
+    billing: "public_api",
+    usageNote: "公开 API，无需 API Key；请控制调用频率并遵守平台使用规则。",
+  },
+  tcptest: {
+    requiresApiKey: true,
+    billing: "metered_per_successful_node",
+    usageNote: "按成功执行的探测节点扣额度；查询节点、额度和结果不扣额度。",
+  },
+  boce: {
+    requiresApiKey: true,
+    billing: "metered_wave_points",
+    usageNote: "按接口单价和所选节点数量扣除波点；具体单价以账户控制台为准。",
+  },
+};
+const PROVIDERS = Object.keys(PROVIDER_METADATA);
+const lastSubmissions = new Map();
 const jobs = new Map();
 
 class HttpError extends Error {
@@ -98,9 +116,26 @@ async function upstream(url, init = {}) {
 }
 
 function providerReady(provider) {
+  if (!Object.hasOwn(PROVIDER_METADATA, provider)) return false;
   if (provider === "tcptest") return Boolean(process.env.TCPTEST_API_KEY);
   if (provider === "boce") return Boolean(process.env.BOCE_API_KEY);
   return provider === "check-host";
+}
+
+function enforceSubmissionRate(req, provider, target, mode, port) {
+  const address = req.socket.remoteAddress || "unknown";
+  const key = [address, provider, target, mode, port || ""].join("|");
+  const now = Date.now();
+  const previous = lastSubmissions.get(key) || 0;
+  if (now - previous < 10_000) {
+    throw new HttpError("同一平台对同一目标请至少间隔 10 秒再发起检测。", 429);
+  }
+  lastSubmissions.set(key, now);
+  if (lastSubmissions.size > 2_000) {
+    for (const [entry, timestamp] of lastSubmissions) {
+      if (now - timestamp > 60_000) lastSubmissions.delete(entry);
+    }
+  }
 }
 
 function requireProvider(provider) {
@@ -165,13 +200,17 @@ async function createCheck(provider, input) {
   const mode = input.mode;
   if (mode !== "ping" && mode !== "tcp") throw new Error("检测类型仅支持 ping 或 tcp");
   const port = mode === "tcp" ? safePort(input.port) : undefined;
-  const count = Math.max(1, Math.min(10, Number(input.count || 4)));
-  const nodeIds = Array.isArray(input.nodeIds) ? input.nodeIds.map(String).slice(0, MAX_NODES) : [];
+  const requestedCount = Number(input.count ?? 4);
+  const count = Number.isFinite(requestedCount) ? Math.max(1, Math.min(10, Math.trunc(requestedCount))) : 4;
+  const nodeIds = Array.isArray(input.nodeIds) ? [...new Set(input.nodeIds.map(String))] : [];
+  if (nodeIds.length > MAX_NODES) throw new Error(`单次最多选择 ${MAX_NODES} 个探测节点。`);
 
   if (provider === "check-host") {
+    if (!nodeIds.length) throw new Error("请先选择 Check-Host.net 的探测节点。");
     const nodes = await getNodes("check-host");
     const allowed = new Set(nodes.map((n) => n.id));
-    const selected = nodeIds.length ? nodeIds.filter((id) => allowed.has(id)) : nodes.filter((n) => n.countryCode === "CN").slice(0, MAX_NODES).map((n) => n.id);
+    const selected = nodeIds.filter((id) => allowed.has(id));
+    if (selected.length !== nodeIds.length) throw new Error("所选 Check-Host.net 节点已变更，请重新读取节点列表。");
     if (!selected.length) throw new Error("没有可用的探测节点");
     const url = new URL(`https://check-host.net/check-${mode === "ping" ? "ping" : "tcp"}`);
     url.searchParams.set("host", mode === "ping" ? target : `${target}:${port}`);
@@ -184,11 +223,15 @@ async function createCheck(provider, input) {
   if (!nodeIds.length) throw new Error("请先获取节点并选择探测节点，避免意外消耗额度");
   const providerNodes = await getNodes(provider);
   const selectedNodes = providerNodes.filter((node) => nodeIds.includes(node.id));
+  if (selectedNodes.length !== nodeIds.length || selectedNodes.length === 0) {
+    throw new Error("所选探测节点已变更或不可用，请重新读取节点列表。");
+  }
+  const safeNodeIds = selectedNodes.map((node) => node.id);
   const nodeMetadata = Object.fromEntries(selectedNodes.map((node) => [node.id, node]));
   if (provider === "boce") {
     const url = new URL(`https://api.boce.com/v3/task/create/${mode === "ping" ? "ping" : "tcping"}`);
     url.searchParams.set("key", process.env.BOCE_API_KEY);
-    url.searchParams.set("node_ids", nodeIds.join(","));
+    url.searchParams.set("node_ids", safeNodeIds.join(","));
     url.searchParams.set("host", mode === "ping" ? target : `${target}:${port}`);
     const result = await upstream(url);
     if (result.error_code !== 0 || !result.data?.id) throw new Error(result.error || "BOCE 创建任务失败");
@@ -200,7 +243,7 @@ async function createCheck(provider, input) {
   // documented schema can be updated without touching the shared UI.
   const result = await upstream("https://www.tcptest.cn/api/open/v1/tasks", {
     method: "POST", headers: tcptestHeaders(),
-    body: JSON.stringify({ type: mode === "ping" ? "ping" : "tcping", target: mode === "ping" ? target : `${target}:${port}`, node_ids: nodeIds, count }),
+    body: JSON.stringify({ type: mode === "ping" ? "ping" : "tcping", target: mode === "ping" ? target : `${target}:${port}`, node_ids: safeNodeIds, count }),
   });
   const taskId = result.id ?? result.task_id ?? result.data?.id;
   if (!taskId) throw new Error(result.error || "TCPTest 未返回任务 ID");
@@ -244,7 +287,13 @@ async function handler(req, res) {
 
   try {
     if (req.method === "GET" && url.pathname === "/v1/providers") {
-      return json(res, 200, { providers: PROVIDERS.map((id) => ({ id, configured: providerReady(id) })) });
+      return json(res, 200, {
+        providers: PROVIDERS.map((id) => ({
+          id,
+          configured: providerReady(id),
+          ...PROVIDER_METADATA[id],
+        })),
+      });
     }
     const quotaMatch = url.pathname.match(/^\/v1\/providers\/([a-z-]+)\/quota$/);
     if (req.method === "GET" && quotaMatch) {
@@ -259,6 +308,8 @@ async function handler(req, res) {
     if (req.method === "POST" && url.pathname === "/v1/checks") {
       const input = await readBody(req);
       const provider = String(input.provider || "");
+      if (!PROVIDERS.includes(provider)) throw new Error("未知检测平台");
+      enforceSubmissionRate(req, provider, normalizeTarget(input.target), input.mode, input.port);
       const task = await createCheck(provider, input);
       const key = `${provider}:${task.taskId}`;
       jobs.set(key, task);
