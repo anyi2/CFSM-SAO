@@ -18,6 +18,27 @@ export const OVERSEAS_COUNTRIES = [
 
 export type NetworkProbeProtocol = "ICMP" | "TCP" | "UDP";
 
+export interface GlobalpingRateLimitSnapshot {
+  type: "ip" | "user";
+  limit: number;
+  remaining: number;
+  resetSeconds: number;
+  creditsRemaining?: number;
+  checkedAt: number;
+}
+
+export class GlobalpingApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly rateLimit?: GlobalpingRateLimitSnapshot,
+    readonly retryAfterSeconds?: number,
+  ) {
+    super(message);
+    this.name = "GlobalpingApiError";
+  }
+}
+
 export interface GlobalpingProbe {
   location?: {
     country?: string;
@@ -47,7 +68,8 @@ export interface GlobalpingLocation {
 export interface GlobalpingMeasurementRequest {
   type: "ping" | "mtr";
   target: string;
-  locations: GlobalpingLocation[];
+  locations: GlobalpingLocation[] | string;
+  inProgressUpdates: boolean;
   measurementOptions: {
     protocol: NetworkProbeProtocol;
     port?: number;
@@ -161,6 +183,7 @@ export function buildGlobalpingMeasurementRequest(
   port: number,
   probes: GlobalpingProbe[],
   protocol: NetworkProbeProtocol = "TCP",
+  reuseProbeMeasurementId?: string,
 ): GlobalpingMeasurementRequest {
   if (!isPublicIpv4(target)) throw new Error("请输入有效的公网 IPv4 地址");
   if (!["ICMP", "TCP", "UDP"].includes(protocol)) throw new Error("请选择 ICMP、TCP 或 UDP 检测协议");
@@ -209,7 +232,9 @@ export function buildGlobalpingMeasurementRequest(
     // Globalping ping supports ICMP and TCP. UDP is supported by MTR instead.
     type: protocol === "UDP" ? "mtr" : "ping",
     target,
-    locations,
+    // A previous measurement ID makes Globalping reuse the selected probes.
+    locations: reuseProbeMeasurementId || locations,
+    inProgressUpdates: true,
     measurementOptions: {
       protocol,
       ...(protocol === "ICMP" ? {} : { port }),
@@ -218,59 +243,93 @@ export function buildGlobalpingMeasurementRequest(
   };
 }
 
+function finiteNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function parseGlobalpingRateLimit(payload: unknown): GlobalpingRateLimitSnapshot | null {
+  if (!payload || typeof payload !== "object") return null;
+  const root = payload as Record<string, unknown>;
+  const rateLimit = root.rateLimit && typeof root.rateLimit === "object" ? root.rateLimit as Record<string, unknown> : {};
+  const measurements = rateLimit.measurements && typeof rateLimit.measurements === "object" ? rateLimit.measurements as Record<string, unknown> : {};
+  const create = measurements.create && typeof measurements.create === "object" ? measurements.create as Record<string, unknown> : {};
+  const limit = finiteNumber(create.limit);
+  const remaining = finiteNumber(create.remaining);
+  const resetSeconds = finiteNumber(create.reset);
+  if (limit === null || remaining === null || resetSeconds === null) return null;
+  const credits = root.credits && typeof root.credits === "object" ? finiteNumber((root.credits as Record<string, unknown>).remaining) : null;
+  return {
+    type: create.type === "user" ? "user" : "ip",
+    limit, remaining, resetSeconds,
+    ...(credits === null ? {} : { creditsRemaining: credits }),
+    checkedAt: Date.now(),
+  };
+}
+
+function parseGlobalpingRateLimitHeaders(headers: Headers): GlobalpingRateLimitSnapshot | null {
+  const limit = finiteNumber(headers.get("X-RateLimit-Limit"));
+  const remaining = finiteNumber(headers.get("X-RateLimit-Remaining"));
+  const resetSeconds = finiteNumber(headers.get("X-RateLimit-Reset"));
+  if (limit === null || remaining === null || resetSeconds === null) return null;
+  const credits = finiteNumber(headers.get("X-Credits-Remaining"));
+  return { type: "ip", limit, remaining, resetSeconds, ...(credits === null ? {} : { creditsRemaining: credits }), checkedAt: Date.now() };
+}
+
+function secondsLabel(seconds: number): string {
+  const value = Math.max(0, Math.ceil(seconds));
+  return value < 60 ? value + " 秒" : Math.ceil(value / 60) + " 分钟";
+}
+
 async function globalpingRequest<T>(
   path: string,
   init: RequestInit = {},
   signal?: AbortSignal,
+  onResponse?: (response: Response) => void,
 ): Promise<T> {
   let response: Response;
   try {
     response = await fetch(GLOBALPING_API_BASE + path, {
-      ...init,
-      signal,
-      credentials: "omit",
-      headers: {
-        Accept: "application/json",
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
-        ...(init.headers || {}),
-      },
+      ...init, signal, credentials: "omit",
+      headers: { Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers || {}) },
     });
   } catch (error) {
     if (signal?.aborted) throw error;
     const method = (init.method || "GET").toUpperCase();
     const endpoint = GLOBALPING_API_BASE + path;
     const reason = error instanceof Error && error.message ? "（浏览器信息：" + error.message + "）" : "";
-    throw new Error(
-      "浏览器无法完成 Globalping 请求：" + method + " " + endpoint +
-      "。可能是当前网络/DNS 无法访问，或页面 CSP、浏览器扩展拦截。" +
-      reason +
-      " 可打开下方“测试 Globalping 接口”链接检查基础连通性。"
-    );
+    throw new Error("浏览器无法完成 Globalping 请求：" + method + " " + endpoint + "。可能是当前网络/DNS 无法访问，或页面 CSP、浏览器扩展拦截。" + reason + " 可打开下方“测试 Globalping 接口”链接检查基础连通性。");
   }
-
+  onResponse?.(response);
   let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new Error("Globalping API 返回了无法识别的数据。");
-  }
-
+  try { payload = await response.json(); } catch { throw new Error("Globalping API 返回了无法识别的数据。"); }
   if (!response.ok) {
     const body = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
-    const nestedError = body.error && typeof body.error === "object"
-      ? (body.error as Record<string, unknown>).message
-      : body.error;
+    const nestedError = body.error && typeof body.error === "object" ? (body.error as Record<string, unknown>).message : body.error;
     const message = String(nestedError || body.message || "");
+    const rateLimit = parseGlobalpingRateLimitHeaders(response.headers);
+    const retryAfterSeconds = finiteNumber(response.headers.get("Retry-After")) ?? undefined;
     if (response.status === 429) {
-      throw new Error("Globalping 免费检测额度暂时达到限制（HTTP 429）。请稍后再试，或在 Globalping 官网查看额度。");
+      const details = [
+        rateLimit ? "额度剩余 " + rateLimit.remaining + " / " + rateLimit.limit + " 次探针测试" : "",
+        rateLimit ? "额度窗口约 " + secondsLabel(rateLimit.resetSeconds) + " 后重置" : "",
+        retryAfterSeconds !== undefined ? "建议等待约 " + secondsLabel(retryAfterSeconds) + " 后重试" : "",
+      ].filter(Boolean).join("；");
+      throw new GlobalpingApiError("Globalping 请求触发频率/额度限制（HTTP 429）。" + (details ? details + "。" : "请稍后再试，并刷新当前额度信息。"), response.status, rateLimit || undefined, retryAfterSeconds);
     }
     if (response.status === 422 && /no matching|no probes|probe/i.test(message)) {
-      throw new Error("当前筛选条件没有匹配到在线探针。请稍后重试，或使用 AntPing 人工检测。");
+      throw new GlobalpingApiError("当前筛选条件没有匹配到在线探针。请稍后重试，或使用 AntPing 人工检测。", response.status, rateLimit || undefined);
     }
-    throw new Error(message || "Globalping 请求失败（HTTP " + response.status + "）。");
+    throw new GlobalpingApiError(message || "Globalping 请求失败（HTTP " + response.status + "）。", response.status, rateLimit || undefined, retryAfterSeconds);
   }
-
   return payload as T;
+}
+export async function getGlobalpingRateLimit(signal?: AbortSignal): Promise<GlobalpingRateLimitSnapshot> {
+  const payload = await globalpingRequest<unknown>("/limits", {}, signal);
+  const snapshot = parseGlobalpingRateLimit(payload);
+  if (!snapshot) throw new Error("Globalping 额度接口返回的数据格式不正确。");
+  return snapshot;
 }
 
 export async function getGlobalpingProbes(signal?: AbortSignal): Promise<GlobalpingProbe[]> {
@@ -282,11 +341,13 @@ export async function getGlobalpingProbes(signal?: AbortSignal): Promise<Globalp
 export async function createGlobalpingMeasurement(
   request: GlobalpingMeasurementRequest,
   signal?: AbortSignal,
-): Promise<{ id: string; probesCount: number }> {
+): Promise<{ id: string; probesCount: number; rateLimit?: GlobalpingRateLimitSnapshot }> {
+  let rateLimit: GlobalpingRateLimitSnapshot | null = null;
   const payload = await globalpingRequest<{ id?: unknown; probesCount?: unknown }>(
     "/measurements",
     { method: "POST", body: JSON.stringify(request) },
     signal,
+    (response) => { rateLimit = parseGlobalpingRateLimitHeaders(response.headers); },
   );
   if (typeof payload.id !== "string" || !payload.id) {
     throw new Error("Globalping 没有返回检测任务编号。");
@@ -294,6 +355,7 @@ export async function createGlobalpingMeasurement(
   return {
     id: payload.id,
     probesCount: Number(payload.probesCount) || 0,
+    ...(rateLimit ? { rateLimit } : {}),
   };
 }
 
