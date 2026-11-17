@@ -120,9 +120,9 @@ async function getNodes(provider) {
   if (provider === "boce") {
     const url = new URL("https://api.boce.com/v3/node/list");
     url.searchParams.set("key", process.env.BOCE_API_KEY);
-    url.searchParams.set("area", "");
+    // Omit area: BOCE documents mainland as the default area.
     const data = await upstream(url);
-    const rows = Array.isArray(data.data) ? data.data : Array.isArray(data.data?.list) ? data.data.list : [];
+    const rows = Array.isArray(data.data) ? data.data : Array.isArray(data.data?.list) ? data.data.list : data.data && typeof data.data === "object" ? Object.values(data.data).flatMap((value) => Array.isArray(value) ? value : []) : [];
     return rows.map((node) => ({
       id: String(node.node_id ?? node.id ?? ""), name: String(node.node_name ?? node.name ?? ""),
       countryCode: "CN", country: "中国", city: String(node.city ?? node.ip_region ?? ""),
@@ -186,7 +186,7 @@ async function createCheck(provider, input) {
   return { provider, mode, target, port, taskId: String(taskId), reportUrl: "", nodes: {}, createdAt: Date.now() };
 }
 
-async function getResult(provider, taskId) {
+async function getResult(provider, taskId, mode = "ping") {
   requireProvider(provider);
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(taskId)) throw new Error("任务 ID 格式不正确");
   if (provider === "check-host") {
@@ -194,7 +194,7 @@ async function getResult(provider, taskId) {
     return { provider, taskId, pending: Object.values(result).some((value) => value === null), raw: result };
   }
   if (provider === "boce") {
-    const url = new URL(`https://api.boce.com/v3/task/${taskId.includes(".") ? "ping" : "ping"}/${encodeURIComponent(taskId)}`);
+    const url = new URL(`https://api.boce.com/v3/task/${mode === "tcp" ? "tcping" : "ping"}/${encodeURIComponent(taskId)}`);
     url.searchParams.set("key", process.env.BOCE_API_KEY);
     const result = await upstream(url);
     return { provider, taskId, pending: result.done !== true, raw: result };
@@ -243,7 +243,7 @@ async function handler(req, res) {
     if (req.method === "GET" && resultMatch) {
       const [, provider, taskId] = resultMatch;
       const task = jobs.get(`${provider}:${taskId}`);
-      const result = await getResult(provider, taskId);
+      if (!task) return json(res, 404, { error: "任务不存在或代理重启后任务记录已过期" });\n      const result = await getResult(provider, taskId, task.mode);
       return json(res, 200, { ...task, ...result });
     }
     return json(res, 404, { error: "Not found" });
