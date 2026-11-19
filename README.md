@@ -1,260 +1,209 @@
-# SAO 系列探针主题 (SAO Series Probe Theme)
+# Anyi2 CFSM-SAO
 
-> **Anyi2 CFSM-SAO 独立分支**：本仓库采用独立日期版本号（CalVer，`YYYY.MM.DD`），不跟随上游 SAO 项目版本递增。当前版本：`v2026.11.17`。
+**面向 [CF-Server-Monitor（CFSM）](https://github.com/huilang-me/CF-Server-Monitor) 的 SAO 系列主题分支。**  
+本项目由 Anyi2 基于 [WAOR/CFSM-SAO](https://github.com/WAOR/CFSM-SAO) 继续维护，保留 SAO 主题的视觉与交互体系，并针对 CFSM 的节点详情、数据展示、路由和网络诊断进行适配与增强。
 
-<p align="center">
-  <strong>服务于探针数据呈现本身的高自由度模块化主题</strong>
+<p>
+  <a href="https://github.com/anyi2/CFSM-SAO/actions/workflows/build-theme.yml"><img src="https://github.com/anyi2/CFSM-SAO/actions/workflows/build-theme.yml/badge.svg?branch=main" alt="Build theme"></a>
+  <a href="https://github.com/anyi2/CFSM-SAO/actions/workflows/pr-checks.yml"><img src="https://github.com/anyi2/CFSM-SAO/actions/workflows/pr-checks.yml/badge.svg?branch=main" alt="Pull request checks"></a>
+  <img src="https://img.shields.io/badge/version-v2026.11.17-blue" alt="Version v2026.11.17">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/WAOR/Komari-Theme-SAO">🌸 Komari 端</a> &nbsp;|&nbsp; 
-  <a href="https://github.com/WAOR/CFSM-SAO">☁️ CFSM 端</a> &nbsp;|&nbsp; 
-  <a href="https://github.com/WAOR/Monitor-SAO">⚡ 极简探针端</a>
+  <img src="./preview.png" alt="Anyi2 CFSM-SAO 主题预览" width="100%">
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
-  <img src="https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen" alt="Node Version">
-  <img src="https://img.shields.io/badge/TypeScript-Strict-blue" alt="TypeScript">
+  <a href="#功能概览">功能概览</a> ·
+  <a href="#安装与更新">安装与更新</a> ·
+  <a href="#开发与构建">开发与构建</a> ·
+  <a href="./CHANGELOG.md">更新日志</a>
 </p>
 
-<p align="center">
-  <img src="./preview.png" alt="Theme Preview" width="100%">
-</p>
-
-
-## 功能来源与本仓库改动范围
-
-本仓库是 [WAOR/CFSM-SAO](https://github.com/WAOR/CFSM-SAO) 的分支版本。为避免混淆原项目成果与本仓库的后续开发，本文按以下口径区分：
-
-- **上游开源功能**：在上游仓库中已经存在、由 SAO 系列项目提供或继承的功能。本仓库保留并继续适配这些能力，不将其列为本仓库独立新增成果。
-- **本仓库修改**：本仓库在上游代码基础上新增、调整或修复的内容，具体以本节列出的项目为准。
-
-### 🌐 上游已有功能（继承并保留）
-
-以下内容属于上游 SAO 系列主题原有的功能介绍，并非本仓库此次开发新增：
-
-- **主题视觉与布局**：透白磨砂玻璃风格、深浅色主题、服务器卡片样式、响应式布局。
-- **首页与集群展示**：SAO 趋势大盘、方格矩阵、在线状态展示、实时吞吐可视化及开屏动效。
-- **指标与资产组件**：首页指标卡、动态微图、三网丢包、资产多币种换算、稳定性评分等系列功能。
-- **主题个性化设置**：主题配色、指标卡池、卡片排序、微图动静态模式、带宽徽章、点阵画板及相关设置。
-- **节点标签与多端适配**：Radix Colors 节点标签配色，以及 Komari、CFSM、Monitor 等不同探针端的适配差异。
-
-上面这些功能的具体支持情况，以对应上游代码和各探针后端接口为准；不能仅凭系列主题的通用介绍推断每个端都具备完全相同的能力。
-
-### 🛠️ 本仓库新增或修改（anyi2/CFSM-SAO）
-
-以下是本仓库相对上游 `WAOR/CFSM-SAO` 的改动，集中在 **CFSM 服务器详情页及其数据呈现**：
-
-- **详情页信息布局调整**：重新组织 CPU、内存、Swap、磁盘等资源信息卡片；拆分网络上行与下行信息；梳理周期流量、配额和重置提示，并优化不同屏幕宽度下的布局。
-- **指标有效性处理**：区分“没有有效样本”和真实的 `0` 值；负载与 GPU 数据缺失或无效时不再伪装成 `0`，避免误读监控数据。
-- **节点信息与数据状态补充**：在详情页呈现可用的节点元信息及数据上报状态，并改善较长元信息的换行显示。
-- **历史图表时间范围修正**：短于一小时的历史范围按分钟显示，避免将十分钟、三十分钟等区间显示得不准确。
-- **主机名详情路由**：新增 `/#/s/<主机名>` 形式的详情地址；通过节点列表将主机名解析回 CFSM 原始 UUID，监控查询仍使用原始 UUID。首页普通、紧凑、迷你三种节点卡片，以及详情页节点切换器，统一使用主机名详情地址。主机名修改后，前端入口会随最新节点信息生成新地址；原有 `/#/server/<UUID>` 路由继续保留，兼容路径也继续支持。
-- **节点详情路由兼容**：新增主机名路由与重名防误跳转，继续保留 UUID 兼容路径。
-- **详情历史导出**：支持负载和 Ping 历史 CSV 下载；缺失字段保持空白，超时样本不生成负延迟，并对文本字段进行表格公式注入防护。
-- **管理员一键三协议跨区域网络检测**：服务器详情页点击一次即可同时发起 ICMP、TCP、UDP 三项 Globalping 检测，并在同一张地区对照表中合并显示结果，无需切换协议页面。先创建 ICMP 基准测量，再用其 measurement ID 让 TCP、UDP 复用同一组探针（基准任务失败时独立选点兜底），提高三种协议的横向可比性。中国电信 AS4134、联通 AS4837、移动 AS9808 各选一个在线探针，海外固定为日本、香港、美国各一个；每个地区只显示一行，三种协议分别显示状态与 RTT。TCP/UDP 共用一个目标端口，ICMP 不需要端口。大陆优先家庭/企业宽带探针，没有时回退同 ASN 其他在线探针并标注类型。浏览器直接调用 Globalping，无需 API Key、独立 Node.js 代理、Cloudflare Worker 或额外 VPS；目标公网 IPv4 优先从所属 CFSM 管理端记录读取，失败时允许手动填写。页面读取 Globalping `/limits` 并显示实时探针测试额度，429 时展示额度与重置提示；使用进行中结果轮询，桌面保留对照表，移动端使用地区卡片。UDP 使用 Globalping MTR 路径探测，路径响应不等于目标 UDP 服务端口开放；只执行手动任务，不进行定时巡检，保留 AntPing 人工复核入口。
-- **工程与恢复能力**：补齐 ZIP 安装包构建、构建资源检查、桌面/移动端 Playwright 冒烟测试、1000 节点大集群行级虚拟渲染压测、WebSocket 长断线重试及减少动态效果适配。
-
-以上改动只针对本仓库列明的 CFSM 端代码，不代表上游其他探针端同步拥有这些修改。后续新增或修改功能时，也会继续按“上游已有”与“本仓库改动”分别记录。
-
 ---
 
-### 🎨  2.0 全新特性
-* **全新透白磨砂与通透质感**：2.0 版本确立了高通透半透明磨砂毛玻璃主题基调，彻底告别单薄生硬的平面表现，深浅模式卡片均极具立体感；
-* **SAO 双层底座服务器卡片**：节点卡片引入全新立体双层底座形态，与LuminaPlus 经典卡片样式自由切换，信息聚合层次分明；
-* **指标数据图形化呈现**：总览指标小卡全面接入高精度数据微图（实时带宽波浪双曲线、今日流量 7h 出入站柱状图、平均 CPU 频谱律动柱等），支持指标卡片微图动/静态模式切换；
-* **三网丢包指标卡片**：电信、联通、移动分线透视，直观掌握骨干网丢包波动，右上角内嵌专属弹窗支持自由挑选参评节点；
-* **资产多币种汇率换算**：支持选择 CNY、USD、EUR 等结算货币并自动计算剩余价值；
-* **稳定评分卡片**：基于丢包+抖动偏离+晚高峰突增算法的线路稳定性评分卡片，客观呈现过去24小时的服务器线路稳定性评分并进行排名。
+## 项目定位
 
+- **适用平台：** CF-Server-Monitor（CFSM）。
+- **项目性质：** SAO 系列主题的 CFSM 适配与独立维护分支，不是 CFSM 服务端，也不包含探针 Agent。
+- **版本策略：** 本仓库独立使用日期版本号（CalVer，`YYYY.MM.DD`），不跟随上游版本号。
+- **源码分支：** `main`。
+- **主题发布分支：** `dist`，由 GitHub Actions 从源码自动构建；CFSM 自定义主题地址应指向该分支，而不是源码分支。
 
----
+本仓库的功能说明会区分**继承自 SAO 上游的主题能力**与**本分支针对 CFSM 的改动**，避免将上游已有功能误标为本仓库原创。
 
-### 🎨  1.0 特性
-* **首页流光幻彩用户昵称**：问候语搭载动态渐变流光昵称，Komari 端自动同步后端账户，CFSM 与 Monitor 端支持登录后点击直接快速编辑；
-* **中性碳黑与护眼浅灰**：纯正中性深色底色；浅色模式降低视觉眩光；
-* **资产数据一键防窥**：敏感节点费用与资产总值默认隐藏，支持顶栏快捷键一键安全截图分享；
-* **iOS 灵动岛全景融入**：安全区色彩自然漫延至状态栏与灵动岛背后，彻底消除顶部色彩断层。
----
+## 功能概览
 
-### 🎮 集群状态双形态自由切换
-支持在主题管理中根据集群规模与偏好自由切换集群状态呈现方案：
+### 主题体验
 
-#### 〰️ 「SAO 趋势大盘」
-专为小集群打磨的集群状态呈现方案：
-* **分段式在线健康指示格**：单机一格映射存活状态，全站在线率一目了然；
-* **SVG 实时吞吐波形**：轻量贝塞尔实时曲线，内置自适应标尺算法，流畅呈现瞬带宽状态；
+- 深色与浅色模式、透白磨砂视觉和响应式布局。
+- 服务器卡片、实时状态展示与指标微图。
+- 两种集群视图：适合快速观察的「趋势大盘」，以及适合大规模节点的「方格矩阵」。
+- 指标卡片池、卡片排序、主题配色、带宽徽章和点阵开屏效果等自定义选项。
+- 面向桌面和移动端的布局适配。
 
-#### 🔲 「SAO 方格矩阵」
-专为大规模集群打造的高密度俯瞰热力看板：
-* **整屏机架热力**：突破趋势大盘的单行在线绿限制，单屏容纳上百台机器，溢出无缝垂直滚动；
-* **实时吞吐动态梯级**：单机方格根据对应服务器的实时吞吐呈现动态色彩梯级变幻；
-* **联动主题配色方案**：方块色彩联动主题配色方案，更多个性化配色将随版本持续扩充；
-* **微型点阵画板与开场预设**：配备 20×5 微型像素 DIY 画板，内置多种点阵图案、文字等常用预设，支持一键载入、支持用户自定义绘制开场图案跨设备漫游同步；
-* **开屏激光扫光动效**：主题内置多款开屏动效设计并将持续更新，动效结束呼吸聚能后平滑切入实时集群数据；
-* **闲置机位灵动呼吸填充**：可选开启闲置插槽模拟数据，周期性随机变幻速率，保持整屏矩阵饱满生动。
+### 本分支的 CFSM 增强
 
----
+- **节点详情页优化：** 重组 CPU、内存、Swap、磁盘、上下行网络、周期流量和配额信息；改善窄屏下的内容排布。
+- **数据有效性处理：** 区分真实的零值与缺失/无效样本，避免将缺失的负载或 GPU 数据显示成误导性的 `0`。
+- **主机名详情路由：** 支持 `/#/s/<主机名>`；保留既有 UUID 路由兼容入口。主机名会解析回 CFSM 原始节点 ID，监控查询仍使用原始 ID。
+- **历史数据导出：** 支持负载和 Ping 历史 CSV 下载，并对缺失字段、超时样本和表格公式注入进行处理。
+- **跨区域网络诊断：** 管理员可手动一次发起 ICMP、TCP、UDP 三项 Globalping 检测，在同一结果矩阵比较中国电信、联通、移动以及日本、香港、美国的探测结果。
+- **稳定性与性能：** 包含 WebSocket 长断线恢复、大规模节点列表虚拟渲染，以及构建产物、桌面/移动端页面和大集群性能的自动化检查。
 
-### 🏷️ 节点高级彩色标签定制 (Radix Colors)
-各探针原生支持的色彩非常有限。SAO 主题在前端层面全量引入并支持了完整的 [Radix UI Colors](https://www.radix-ui.com/themes/docs/theme/color) 调色板，可在后台为线路或节点自由指定丰富的高定专属色彩：
+> 具体能力取决于 CFSM 后端实际提供的数据与接口。主题本身不会替代 CFSM 服务端功能，也不会为后端不存在的数据造值。
 
-* **🌸 Komari 端指定语法**：在后台节点标签中填写 `标签名<颜色>`，多标签用分号 `;` 分隔：
-  ```text
-  CN2GIA<Blue>;9929<Tomato>;CMIN2<Grass>;精品网<Amber>
-  ```
-* **☁️ CFSM 端指定语法**：在后台节点备注中填写 `标签名-颜色`，多标签用英文逗号 `,` 分隔：
-  ```text
-  CN2GIA-Blue,9929-Tomato,CMIN2-Grass,精品网-Amber
-  ```
-* **⚡ 极简探针端说明**：因当前极简探针官方服务端尚未提供节点标签（Tags）字段，该功能暂处于冻结等待期，待服务端后续开放后主题将第一时间跟进适配。
-* **支持的色彩池**：全量支持 Radix UI 规范色彩名（不区分大小写）：
-  > `Tomato` · `Red` · `Ruby` · `Crimson` · `Pink` · `Plum` · `Purple` · `Violet` · `Iris` · `Indigo` · `Blue` · `Cyan` · `Teal` · `Jade` · `Green` · `Grass` · `Lime` · `Mint` · `Sky` · `Amber` · `Yellow` · `Orange` · `Gold` · `Bronze` 等。
+## 安装与更新
 
----
+### 通过 CFSM 自定义主题 URL 安装
 
-## 📸 视觉效果预览
+1. 打开 CFSM 管理后台，进入主题配置中提供的**自定义主题 URL**入口。
+2. 填入以下地址：
 
-### 🎬 动态效果实录 (Video Demo)
+   ```text
+   https://github.com/anyi2/CFSM-SAO/tree/dist
+   ```
 
-https://github.com/user-attachments/assets/0540209f-442d-4977-b872-ff04821e0843
+3. 保存并按 CFSM 的主题加载流程启用主题。
 
----
+**请使用 `dist` 分支地址。** `main` 是开发源码，包含 TypeScript/React 工程文件，不是可直接加载的主题构建目录。
 
-### 🖥️ 桌面端集群全景 (Desktop Overview)
+### 固定到指定版本
 
-#### 1. 深色极客体系 (Dark Mode)
-| EVA 初号机配色 · 方格矩阵 | 命运石之门配色 · 方格矩阵 |
-| :---: | :---: |
-| <img src="./docs/images/dark+EVA配色+方格矩阵.png" alt="深色模式 EVA 初号机配色 方格矩阵" width="100%" /> | <img src="./docs/images/dark+命运石之门配色+方格矩阵.png" alt="深色模式 命运石之门配色 方格矩阵" width="100%" /> |
-
-#### 2. 浅色典雅体系 (Light Mode)
-| 经典标准配色 · 方格矩阵 | 命运石之门配色 · 方格矩阵 |
-| :---: | :---: |
-| <img src="./docs/images/light+经典标准配色+方格矩阵.png" alt="浅色模式 经典标准配色 方格矩阵" width="100%" /> | <img src="./docs/images/light+命运石之门配色+方格矩阵.png" alt="浅色模式 命运石之门配色 方格矩阵" width="100%" /> |
-
-| 经典标准配色 · 趋势大盘 | EVA 初号机配色 · 趋势大盘 |
-| :---: | :---: |
-| <img src="./docs/images/light+经典标准配色+趋势大盘.png" alt="浅色模式 经典标准配色 趋势大盘" width="100%" /> | <img src="./docs/images/light+EVA配色+趋势大盘.png" alt="浅色模式 EVA 初号机配色 趋势大盘" width="100%" /> |
-
----
-
-### ⚙️ 主题设置与 DIY 高级定制 (Customization & Layouts)
-
-| SAO 指标卡池（自由点选与拖拽重排） | SAO 方格机架矩阵与开屏动效设定 |
-| :---: | :---: |
-| <img src="./docs/images/SAO指标卡池.png" alt="SAO 指标卡池" width="100%" /> | <img src="./docs/images/SAO%20方格矩阵.png" alt="SAO 方格矩阵" width="100%" /> |
-
-| 实时带宽评级徽章自定义 (DIY) |
-| :---: |
-| <img src="./docs/images/带宽评级徽章DIY.png" alt="带宽评级徽章 DIY" width="100%" /> |
-
----
-
-### 📱 移动端精细响应式适配 (Mobile Experience)
-
-| 移动端全息方块矩阵呈现 (EVA 配色) | 移动端多功能主题设置抽屉 |
-| :---: | :---: |
-| <img src="./docs/images/移动端+EVA配色+方块矩阵%20呈现效果.png" alt="移动端 EVA 配色方块矩阵" width="100%" /> | <img src="./docs/images/移动端%20主题设置.png" alt="移动端 主题设置" width="100%" /> |
-
----
-
-## 🧩 多端特性对比矩阵
-
-| 核心特性 / 维度               |                         🌸 Komari 端                          |                      ⚡ 极简探针端                       |                  ☁️ CFSM 端                   |
-| :---------------------- | :----------------------------------------------------------: | :------------------------------------------------: | :------------------------------------------: |
-| **方格矩阵**                |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **趋势大盘**                |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **磨砂玻璃卡片**              |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **带宽评级徽章自定义**           |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **双层底座服务器卡片**           |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **指标卡专属动态微图**           |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **微图动/静态模式切换**          |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **首页流光幻彩昵称**            |                           🤖 自动读取                            |                     ✏️ 点击编辑保存                      |                  ✏️ 点击编辑保存                   |
-| **三网丢包指标卡片**            |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **资产多币种汇率换算**           |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **稳定评分指标卡片 & 天梯榜**      |                           🏆 独占支持                            |                      ❌ 受限暂未支持                      |                   ❌ 受限暂未支持                   |
-| **指标小卡数量**              |                          ✅ 14 张指标卡片                          |                     ✅ 13 张指标卡片                     |                  ✅ 12 张指标卡片                  |
-| **主题配色方案**              |                           ✅ 持续更新中                            |                      ✅  持续更新中                      |                   ✅  持续更新中                   |
-| **开屏动效 & 点阵画板**         |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **主题更新感知提示**            |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **地区标签惯性拖动 & 超限自动循环滚动** |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **光柱色彩 & 延迟丢包阈值自定义**    |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **主题设置随改随存**            |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **资产隐蔽保护**              |                             ✅ 支持                             |                        ✅ 支持                        |                     ✅ 支持                     |
-| **节点标签自定义色彩**           |                     🏷️ 指定色彩 (`标签<颜色>`)                      |                     ⏳ 待后端开放接口                      |              🏷️ 指定色彩 (`标签-颜色`)              |
-| **部署方式**                |                     主题商店搜索一键安装 / 上传 ZIP                      |                 填入仓库地址一键安装 / 上传压缩包                 |             主题商店搜索一键启用 / 仓库地址安装              |
-| **项目地址**                | [Komari-Theme-SAO](https://github.com/WAOR/Komari-Theme-SAO) | [Monitor-SAO](https://github.com/WAOR/Monitor-SAO) | [CFSM-SAO](https://github.com/WAOR/CFSM-SAO) |
-
----
-
-## 🏷️ 多端版本号规范与维护机制
-
-**SAO 系列探针主题**目前涵盖 [Komari-Theme-SAO](https://github.com/WAOR/Komari-Theme-SAO)、[CFSM-SAO](https://github.com/WAOR/CFSM-SAO) 与 [Monitor-SAO](https://github.com/WAOR/Monitor-SAO) 三个版本。为兼顾**跨端核心功能演进的一致性**与**单一探针平台差异化适配的灵活性**，三端主题版本号遵循以下维护约定：
+如需锁定版本、避免跟随 `dist` 后续更新，可将地址中的 `dist` 替换为对应的完整 Git Commit SHA：
 
 ```text
-v 主版本 . 次版本 . 修订版本  (规范格式: vX.Y.Z)
-   │        │        │
-   │        │        └── 单端专属补丁/小修小补（Patch，各端按需独立递增，不追求一致）
-   └────────┴─────────── 跨端核心功能与架构重塑（Major.Minor，三端严格对齐）
+https://github.com/anyi2/CFSM-SAO/tree/<commit-sha>
 ```
 
-- **前两位（`X.Y` - 主版本与功能代际）**：代表跨端通用的新功能、重大特性与架构重塑（如全新主题配色、动效升级、自定义光柱、设置后台重构等）。三端主题在此层级保持**严格对齐**，确保多平台用户享有相同的功能体验与视觉质感。
-- **末位（`Z` - 单端修订补丁）**：代表针对特定探针后端的专属修复、接口兼容与小修小补。
-  - 由于各探针服务端（Komari、CFSM、极简探针）的底层技术栈、接口规范与更新节奏各不相同，当某一端需要单独修复平台缺陷或优化特定机制时，仅独立递增该端的末位补丁号；
-  - 其他未受影响的端保持既有稳定版本，**日常维护期各端末尾修订号不追求刻意对齐**；
-  - **跨端汇合机制**：当后续推出跨端通用的新特性、迭代至下一个功能代际（如递增次版本号进入新的 `X.(Y+1).0`）时，三端版本号将再次同步对齐，末位补丁号归零。
+构建产物会保留历史提交，因此固定 SHA 的地址可用于回退或复现指定版本。版本变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
----
+### 网络诊断模块的 CSP 配置
 
-## 🚀 安装与部署
+跨区域网络诊断由浏览器直接请求 Globalping 公共 API，不需要额外部署代理、Worker、Node.js 服务或填写 API Key。
 
-SAO 主题已上架三端各自的主题生态，均提供便捷的一键安装或离线部署支持：
+如果 CFSM 的内容安全策略（CSP）阻止了请求，请在 CFSM 管理后台的外观设置中，将以下域名加入 **CSP API domains** 允许列表：
 
-### 🌸 Komari 端
-* **方式一：主题商店一键安装（推荐）**  
-  进入 Komari 管理后台「主题商店」，搜索 **SAO** 点击安装并启用。
-* **方式二：手动上传安装包**  
-  前往 [Komari-Theme-SAO Releases](https://github.com/WAOR/Komari-Theme-SAO/releases) 下载主题压缩包，在后台主题管理中上传启用。
+```text
+https://api.globalping.io
+```
 
-### ⚡ 极简探针端 (Monitor-Probe)
-* **方式一：仓库地址一键安装（推荐）**  
-  在极简探针管理后台「主题设置」页面，复制填入极简探针主题仓库地址 `https://github.com/WAOR/Monitor-SAO` 即可一键拉取安装。
-* **方式二：手动上传安装包**  
-  前往 [Monitor-SAO Releases](https://github.com/WAOR/Monitor-SAO/releases) 下载最新打包产物 `theme.tar.gz`，在后台主题设置页面上传启用。
+此配置只影响网络诊断模块的外部 API 访问，不是主题安装地址。
 
-### ☁️ CFSM 端 (CF-Server-Monitor)
+### 网络检测结果说明
 
-**节点详情页地址规则**
-- 新版详情页使用主机名作为路径：`/#/s/<主机名>`，例如 `/#/s/Tokyo-Node`。
-- 首页普通、紧凑、迷你三种节点卡片的名称链接和详情入口，以及详情页节点切换器，均统一跳转到主机名路由。
-- 主机名由 CFSM 节点配置提供；新增节点或修改主机名后，主题会根据最新节点列表生成对应详情地址，无需修改主题代码。
-- 主机名需保持唯一。主题会将 URL 中的主机名解析回 CFSM 原始节点 ID（UUID），监控数据与实时订阅仍使用原始 ID。
-- 路由生成时会去除主机名前后空白，并将主机名编码为单个 URL 路径段；主机名为空时回退使用 UUID。主机名包含中文、空格或特殊字符时可正常编码。
-- 旧版 `/#/server/<UUID>` 与兼容路径 `/#/instance/<UUID>` 继续保留，原有书签可继续使用。
+- ICMP 用于连通性与 RTT 观察；ICMP 无响应不代表 TCP/UDP 服务不可用。
+- TCP 使用填写的目标端口进行探测；拒绝/重置与超时是不同结果。
+- UDP 使用 Globalping MTR 路径探测。**路径节点有响应不代表目标 UDP 服务端口开放；没有响应也不能单独证明端口关闭。**
+- 检测由管理员手动触发，不执行定时巡检或后台自动扫描。
+- Globalping 测量可能公开显示目标地址、端口及测量结果。请只提交可公开的目标信息，不要输入密码、访问令牌或其他机密。
 
-* **方式一：主题商店一键启用（推荐）**  
-  登录 CFSM 后台前往「主题商店」，搜索 **SAO** 主题点击启用即可。
-* **方式二：手动添加仓库地址（锁定特定版本）**  
-  在「主题商店」中填入自定义地址安装：
-  - 追踪最新发布版：`https://github.com/WAOR/CFSM-SAO/tree/dist`
-  - 锁定特定 Commit：`https://github.com/WAOR/CFSM-SAO/tree/<40位CommitSHA>`
+实现细节、探针选择、请求额度和结果解释见 [跨区域三协议网络检测说明](./docs/NETWORK_PROBE_IMPLEMENTATION.md)。
 
----
+## 视觉预览
 
-## 💖 致谢
+### 桌面端
 
-感谢以下优秀开源项目与社区贡献者的付出：
-* **[stqfdyr/komari-theme-Lumina](https://github.com/stqfdyr/komari-theme-Lumina)**：初代优雅主题开创者。
-* **[shanyang242/Komari-Theme-LuminaPlus](https://github.com/shanyang242/Komari-Theme-LuminaPlus)**：出色的功能增强分支与架构设计。
-* **[volcano-1025/CFSM-Theme-LuminaPlus](https://github.com/volcano-1025/CFSM-Theme-LuminaPlus)**：CFSM 平台的早期移植探索。
-* **[guboysky/LuminaPlus](https://github.com/guboysky/LuminaPlus)**：Monitor 探针平台的移植尝试。
-* **[Montia37/komari-theme-purcarte](https://github.com/Montia37/komari-theme-purcarte)**：动态背景视频的设计与参考素材。
-* **[komari-monitor/komari](https://github.com/komari-monitor/komari)**、**[huilang-me/CF-Server-Monitor](https://github.com/huilang-me/CF-Server-Monitor/)** 与 **[monitor-probe/monitor](https://github.com/monitor-probe/monitor)**：探针监控服务端的作者及社区维护者。
+| 深色模式 · 方格矩阵 | 浅色模式 · 趋势大盘 |
+|:---:|:---:|
+| <img src="./docs/images/dark+EVA配色+方格矩阵.png" alt="深色模式方格矩阵" width="100%"> | <img src="./docs/images/light+经典标准配色+趋势大盘.png" alt="浅色模式趋势大盘" width="100%"> |
 
----
+### 自定义设置与移动端
 
-## 📄 开源许可证
+| 指标卡片设置 | 移动端方格矩阵 |
+|:---:|:---:|
+| <img src="./docs/images/SAO指标卡池.png" alt="指标卡片池设置" width="100%"> | <img src="./docs/images/移动端+EVA配色+方块矩阵%20呈现效果.png" alt="移动端方格矩阵" width="100%"> |
 
-SAO 系列主题基于 [MIT License](LICENSE) 开源发布。
+| 移动端主题设置 |
+|:---:|
+| <img src="./docs/images/移动端%20主题设置.png" alt="移动端主题设置" width="68%"> |
+
+### 动态演示
+
+[查看主题动态效果](https://github.com/user-attachments/assets/0540209f-442d-4977-b872-ff04821e0843)。
+
+## 开发与构建
+
+本仓库是前端主题工程，主要使用 React、TypeScript、Vite 和 Tailwind CSS。CI 使用 Node.js 22。
+
+### 环境要求
+
+- Node.js 22
+- npm（随 Node.js 安装）
+
+### 本地运行
+
+```bash
+git clone https://github.com/anyi2/CFSM-SAO.git
+cd CFSM-SAO
+npm ci
+npm run dev
+```
+
+Vite 开发服务器启动后，按终端输出的本地地址访问。若需连接实际 CFSM 环境，可通过本地环境变量 `API_BASE` 指定 API 基址；不要把生产环境凭据或密钥提交到仓库。
+
+### 常用命令
+
+| 命令 | 说明 |
+|---|---|
+| `npm run dev` | 启动本地开发服务器 |
+| `npm run build` | 类型检查并构建生产主题 |
+| `npm run package` | 构建、校验并生成主题 ZIP 安装包 |
+| `npm run typecheck` | TypeScript 类型检查 |
+| `npm run lint` | ESLint 检查 |
+| `npm test` | 运行 Vitest 单元测试 |
+| `npm run verify:build` | 校验构建产物结构与资源引用 |
+
+## 项目结构
+
+```text
+.
+├── .github/workflows/   # CI、主题构建与发布工作流
+├── docs/                # 功能实现说明与界面截图
+├── scripts/             # 构建校验、打包、浏览器冒烟及性能检查
+├── src/                 # React/TypeScript 主题源码
+├── CHANGELOG.md         # 版本更新记录
+├── VERSIONING.md        # 日期版本号策略
+├── LICENSE              # MIT 许可证
+└── README.md
+```
+
+## 质量检查与发布流程
+
+向 `main` 提交 Pull Request 时，CI 会执行：
+
+- TypeScript 类型检查、ESLint 与 Vitest。
+- 生产构建、构建目录校验和 ZIP 包完整性检查。
+- Playwright 桌面/移动端浏览器冒烟测试。
+- 大规模节点场景性能冒烟测试。
+
+合并到 `main` 后，GitHub Actions 会构建主题并将可加载文件发布到 `dist`。请勿把手工修改直接提交到 `dist`；它是自动生成的发布分支。
+
+## 参与贡献
+
+欢迎通过 [Issues](https://github.com/anyi2/CFSM-SAO/issues) 报告问题、提出建议，或提交 Pull Request。
+
+提交前请：
+
+1. 尽量提供 CFSM 版本、浏览器、复现步骤和相关截图；请勿在 Issue 中公开密码、Token 或私人服务器信息。
+2. 保持改动范围清晰，并为行为变更补充或更新测试。
+3. 更新 `CHANGELOG.md` 当前版本（`package.json` 中的版本号）对应的条目。仓库 CI 会检查该要求。
+4. 在本地运行相关检查；Pull Request 还需通过仓库 CI。
+
+## 版本与更新日志
+
+本仓库使用 CalVer：`YYYY.MM.DD`。版本号独立于 SAO 上游项目维护。完整规则见 [VERSIONING.md](./VERSIONING.md)，版本变更见 [CHANGELOG.md](./CHANGELOG.md)。
+
+## 上游项目与致谢
+
+本项目是基于上游项目持续开发的分支。感谢原作者及相关开源社区：
+
+- [WAOR/CFSM-SAO](https://github.com/WAOR/CFSM-SAO)：本项目直接来源与 SAO 系列 CFSM 主题上游。
+- [WAOR/Komari-Theme-SAO](https://github.com/WAOR/Komari-Theme-SAO) 与 [WAOR/Monitor-SAO](https://github.com/WAOR/Monitor-SAO)：SAO 系列的其他平台版本。
+- [stqfdyr/komari-theme-Lumina](https://github.com/stqfdyr/komari-theme-Lumina)、[shanyang242/Komari-Theme-LuminaPlus](https://github.com/shanyang242/Komari-Theme-LuminaPlus)、[volcano-1025/CFSM-Theme-LuminaPlus](https://github.com/volcano-1025/CFSM-Theme-LuminaPlus) 与 [guboysky/LuminaPlus](https://github.com/guboysky/LuminaPlus)：相关主题设计、移植与功能探索。
+- [komari-monitor/komari](https://github.com/komari-monitor/komari)、[huilang-me/CF-Server-Monitor](https://github.com/huilang-me/CF-Server-Monitor) 与 [monitor-probe/monitor](https://github.com/monitor-probe/monitor)：监控平台及其开源生态。
+
+## 许可证
+
+本仓库按 [MIT License](./LICENSE) 发布。使用、分发或修改时，请保留许可证及适用的版权声明。
