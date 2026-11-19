@@ -8,17 +8,16 @@ import {
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
 import { useAllNodeMeta, useHomeNodeSummaries } from "@/hooks/useNode";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
 import { collectMatchingNodeUuids } from "@/utils/nodeIdentity";
 import { makeNodeSlug } from "@/utils/nodeSlug";
+import { filterVisibleNodes } from "@/utils/nodeVisibility";
 
 export function InstanceSwitcher({ currentUuid }: { currentUuid: string }) {
   const allMeta = useAllNodeMeta();
   const summaries = useHomeNodeSummaries();
   const { hiddenNodes } = useThemeSettings();
-  const { data: me } = useAuth();
   const { state } = useLocation();
   const homeHistorySteps: number | undefined = state?.homeHistorySteps;
   const navigate = useNavigate();
@@ -40,16 +39,12 @@ export function InstanceSwitcher({ currentUuid }: { currentUuid: string }) {
 
   const nodes = useMemo(
     () =>
-      allMeta
-        .filter(
-          (node) => !hiddenUuids.has(node.uuid) && (me?.logged_in === true || !node.hidden),
-        )
-        .map((node) => ({
-          uuid: node.uuid,
-          name: node.name?.trim() || node.uuid,
-          online: onlineByUuid.get(node.uuid) ?? null,
-        })),
-    [allMeta, hiddenUuids, me?.logged_in, onlineByUuid],
+      filterVisibleNodes(allMeta, hiddenUuids).map((node) => ({
+        uuid: node.uuid,
+        name: node.name?.trim() || node.uuid,
+        online: onlineByUuid.get(node.uuid) ?? null,
+      })),
+    [allMeta, hiddenUuids, onlineByUuid],
   );
 
   useEffect(() => {

@@ -28,6 +28,7 @@ import { usePriceVisibility } from "@/hooks/usePriceVisibility";
 import { getNodeMetricsSnapshot, type HomeNodeSummary } from "@/services/wsStore";
 import { calculateCostSummary, getExchangeRates, readCachedExchangeRates } from "@/utils/cost";
 import { useHiddenNodeUuids } from "@/hooks/useVisibleNodes";
+import { filterVisibleNodes } from "@/utils/nodeVisibility";
 import {
   getHomeGroupLabel,
   getHomeGroupOptions,
@@ -937,19 +938,13 @@ export function NodeGrid() {
   // 摘要不含名称，先从完整 meta 解析主题隐藏列表，再统一过滤各类数据。
   const hiddenUuids = useHiddenNodeUuids();
   const visibleNodes = useMemo(
-    () =>
-      nodes.filter(
-        (node) => (me?.logged_in === true || !node.hidden) && !hiddenUuids.has(node.uuid),
-      ),
-    [me?.logged_in, nodes, hiddenUuids],
+    () => filterVisibleNodes(nodes, hiddenUuids),
+    [nodes, hiddenUuids],
   );
   // 资产统计与卡片使用同一可见性规则，避免泄露隐藏节点信息。
   const visibleMeta = useMemo(
-    () =>
-      allMeta.filter(
-        (node) => (me?.logged_in === true || !node.hidden) && !hiddenUuids.has(node.uuid),
-      ),
-    [allMeta, me?.logged_in, hiddenUuids],
+    () => filterVisibleNodes(allMeta, hiddenUuids),
+    [allMeta, hiddenUuids],
   );
   const renewalNodes = useMemo<RenewalReminderSource[]>(() => {
     const onlineByUuid = new Map(

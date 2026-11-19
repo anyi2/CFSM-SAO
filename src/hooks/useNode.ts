@@ -22,8 +22,8 @@ import {
   type NodeOnlineSummary,
 } from "@/services/wsStore";
 import type { NodeInfo, NodeMetrics, TrafficTrendSample } from "@/types/cfsm";
-import { useAuth } from "@/hooks/useAuth";
 import { useHiddenNodeUuids } from "@/hooks/useVisibleNodes";
+import { filterVisibleNodes } from "@/utils/nodeVisibility";
 
 const noopUnsubscribe = () => undefined;
 
@@ -103,18 +103,14 @@ export function useAllNodeMeta(): NodeInfo[] {
 
 export function useVisibleNodeUuids(includeHidden = false): string[] {
   const allNodes = useAllNodeMeta();
-  const { data: me } = useAuth();
   const hiddenUuids = useHiddenNodeUuids();
   return useMemo(
     () =>
-      allNodes
-        .filter(
-          (node) =>
-            (includeHidden || me?.logged_in === true || !node.hidden) &&
-            !hiddenUuids.has(node.uuid),
-        )
-        .map((node) => node.uuid),
-    [allNodes, hiddenUuids, includeHidden, me?.logged_in],
+      (includeHidden
+        ? allNodes.filter((node) => !hiddenUuids.has(node.uuid))
+        : filterVisibleNodes(allNodes, hiddenUuids)
+      ).map((node) => node.uuid),
+    [allNodes, hiddenUuids, includeHidden],
   );
 }
 

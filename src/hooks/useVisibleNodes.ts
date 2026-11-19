@@ -1,9 +1,9 @@
 import { useMemo } from "react";
-import { useAuth } from "@/hooks/useAuth";
 import { useAllNodeMeta } from "@/hooks/useNode";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
 import { collectMatchingNodeUuids } from "@/utils/nodeIdentity";
 import type { NodeInfo } from "@/types/cfsm";
+import { filterVisibleNodes } from "@/utils/nodeVisibility";
 
 let cachedMeta: NodeInfo[] | null = null;
 let cachedHidden: string[] | null = null;
@@ -29,18 +29,14 @@ export function useHiddenNodeUuids(): Set<string> {
 }
 
 /**
- * 全站统一的节点可见性口径:后台 hidden 仅登录管理员可见,主题级隐藏对所有人剔除,
- * auth 未就绪按访客处理(fail-closed)。
+ * 全站统一的节点可见性口径：后端 hidden 和主题级隐藏对所有访客（包括已登录用户）均不渲染。
+ * 后端仍保留节点真实状态；这里仅过滤主题前端的展示数据。
  */
 export function useVisibleNodes(): NodeInfo[] {
   const allNodes = useAllNodeMeta();
-  const { data: me } = useAuth();
   const hiddenUuids = useHiddenNodeUuids();
   return useMemo(
-    () =>
-      allNodes.filter(
-        (node) => (me?.logged_in === true || !node.hidden) && !hiddenUuids.has(node.uuid),
-      ),
-    [allNodes, hiddenUuids, me?.logged_in],
+    () => filterVisibleNodes(allNodes, hiddenUuids),
+    [allNodes, hiddenUuids],
   );
 }

@@ -13,11 +13,11 @@ import {
 } from "@/components/instance/chartShared";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  useAllNodeMeta,
   useNodeMeta,
   useNodeStoreStatus,
   useRealtimeFocus,
 } from "@/hooks/useNode";
+import { useVisibleNodes } from "@/hooks/useVisibleNodes";
 import { findNodesBySlug } from "@/utils/nodeSlug";
 import { useThemeSettings } from "@/hooks/useThemeSettings";
 import { ANONYMOUS_MAX_HISTORY_HOURS, invalidateSiteConfigCache } from "@/services/api";
@@ -93,14 +93,17 @@ export function Instance() {
   const { uuid, slug } = useParams<{ uuid: string; slug: string }>();
   const { state: navigationState } = useLocation();
   const homeHistorySteps: number | undefined = navigationState?.homeHistorySteps;
-  const allNodes = useAllNodeMeta();
-  const slugMatches = slug ? findNodesBySlug(allNodes, slug) : [];
+  const visibleNodes = useVisibleNodes();
+  const slugMatches = slug ? findNodesBySlug(visibleNodes, slug) : [];
   const isAmbiguousSlug = slugMatches.length > 1;
+  const uuidIsVisible = uuid ? visibleNodes.some((node) => node.uuid === uuid) : false;
   const resolvedUuid = slug
     ? slugMatches.length === 1
       ? slugMatches[0].uuid
       : undefined
-    : uuid;
+    : uuidIsVisible
+      ? uuid
+      : undefined;
   const auth = useAuth();
   const { data: me, refetch: refetchAuth } = auth;
   const authRefreshRequested = useRef(false);
