@@ -363,6 +363,7 @@ function CompactNodeHeader({
           <Flag region={node.region} size={15} />
           <Link
             to={`/s/${encodeURIComponent(makeNodeSlug(node.name || node.uuid) || node.uuid)}`}
+            state={{ homeHistorySteps: 1 }}
             className="compact-node-title"
             title={node.name}
           >
@@ -373,6 +374,7 @@ function CompactNodeHeader({
       <div className="compact-node-actions">
         <Link
           to={`/s/${encodeURIComponent(makeNodeSlug(node.name || node.uuid) || node.uuid)}`}
+          state={{ homeHistorySteps: 1 }}
           className="compact-node-detail-link"
           title={detailLabels.title}
           aria-label={detailLabels.ariaLabel}

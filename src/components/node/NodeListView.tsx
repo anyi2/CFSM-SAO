@@ -285,6 +285,7 @@ const NodeRow = memo(function NodeRow({ uuid }: { uuid: string }) {
     <Link
       id={`node-card-${uuid}`}
       to={`/server/${encodeURIComponent(uuid)}`}
+      state={{ homeHistorySteps: 1 }}
       className={clsx("node-list-row", isOffline && "is-offline")}
       title={detailLabels.title}
       aria-label={rowLabel}

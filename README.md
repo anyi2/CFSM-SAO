@@ -5,7 +5,7 @@
 
 <p>
   <a href="https://github.com/anyi2/CFSM-SAO/actions/workflows/build-theme.yml"><img src="https://github.com/anyi2/CFSM-SAO/actions/workflows/build-theme.yml/badge.svg?branch=main" alt="Build theme"></a>
-  <img src="https://img.shields.io/badge/version-v2026.11.17-blue" alt="Version v2026.11.17">
+  <img src="https://img.shields.io/badge/version-v2026.11.19-blue" alt="Version v2026.11.17">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
 </p>
 
