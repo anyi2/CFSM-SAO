@@ -5,7 +5,6 @@
 
 <p>
   <a href="https://github.com/anyi2/CFSM-SAO/actions/workflows/build-theme.yml"><img src="https://github.com/anyi2/CFSM-SAO/actions/workflows/build-theme.yml/badge.svg?branch=main" alt="Build theme"></a>
-  <a href="https://github.com/anyi2/CFSM-SAO/actions/workflows/pr-checks.yml"><img src="https://github.com/anyi2/CFSM-SAO/actions/workflows/pr-checks.yml/badge.svg?branch=main" alt="Pull request checks"></a>
   <img src="https://img.shields.io/badge/version-v2026.11.17-blue" alt="Version v2026.11.17">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
 </p>
