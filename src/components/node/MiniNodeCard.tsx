@@ -51,11 +51,12 @@ function MiniHeader({
   return (
     <header className="mini-node-header">
       <Flag region={node.region} size={14} />
-      <Link to={detailHref} className="mini-node-title" title={node.name}>
+      <Link to={detailHref} state={{ homeHistorySteps: 1 }} className="mini-node-title" title={node.name}>
         {node.name}
       </Link>
       <Link
         to={detailHref}
+        state={{ homeHistorySteps: 1 }}
         className="mini-node-os"
         title={detailLabels.title}
         aria-label={detailLabels.ariaLabel}

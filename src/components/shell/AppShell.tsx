@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, ScrollRestoration, useLocation } from "react-router-dom";
 import { Lock, WifiOff, RotateCw, ArrowRight } from "lucide-react";
 import { TurnstileGate } from "./TurnstileGate";
 import { RealtimeSessionPrompt } from "./RealtimeSessionPrompt";
@@ -33,7 +33,8 @@ export function AppShell() {
     normalizedPath === "/" ||
     normalizedPath === "/assets" ||
     normalizedPath.startsWith("/server/") ||
-    normalizedPath.startsWith("/instance/");
+    normalizedPath.startsWith("/instance/") ||
+    normalizedPath.startsWith("/s/");
   const isAuthorized = publicConfig.data?.authorization === true || auth.data?.logged_in === true;
   const isCheckingAccess =
     isDataRoute &&
@@ -120,6 +121,7 @@ export function AppShell() {
           )}
         </div>
       </main>
+      <ScrollRestoration />
       <RealtimeSessionPrompt />
       <SiteThemeSyncNotice />
     </div>

@@ -305,6 +305,7 @@ function NodeCardHeader({
           <Flag region={node.region} size={15} />
           <Link
             to={`/s/${encodeURIComponent(makeNodeSlug(node.name || node.uuid) || node.uuid)}`}
+            state={{ homeHistorySteps: 1 }}
             className="server-card-title-link"
             title={node.name}
           >
@@ -325,6 +326,7 @@ function NodeCardHeader({
       <div className="server-card-actions">
         <Link
           to={`/s/${encodeURIComponent(makeNodeSlug(node.name || node.uuid) || node.uuid)}`}
+          state={{ homeHistorySteps: 1 }}
           className="server-card-detail-link"
           title={detailLabels.title}
           aria-label={detailLabels.ariaLabel}

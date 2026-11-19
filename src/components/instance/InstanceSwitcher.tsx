@@ -6,7 +6,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAllNodeMeta, useHomeNodeSummaries } from "@/hooks/useNode";
@@ -19,6 +19,8 @@ export function InstanceSwitcher({ currentUuid }: { currentUuid: string }) {
   const summaries = useHomeNodeSummaries();
   const { hiddenNodes } = useThemeSettings();
   const { data: me } = useAuth();
+  const { state } = useLocation();
+  const homeHistorySteps: number | undefined = state?.homeHistorySteps;
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const listId = useId();
@@ -87,7 +89,9 @@ export function InstanceSwitcher({ currentUuid }: { currentUuid: string }) {
     if (uuid !== currentUuid) {
       const selected = nodes.find((node) => node.uuid === uuid);
       const slug = makeNodeSlug(selected?.name || uuid);
-      navigate(`/s/${encodeURIComponent(slug || uuid)}`);
+      navigate(`/s/${encodeURIComponent(slug || uuid)}`, {
+        state: homeHistorySteps ? { homeHistorySteps: homeHistorySteps + 1 } : undefined,
+      });
     }
   };
 

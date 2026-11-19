@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation, useNavigate } from "react-router-dom";
 import { ChevronLeft, Download } from "lucide-react";
 import "uplot/dist/uPlot.min.css";
 import { InstanceDetails } from "@/components/instance/InstanceDetails";
@@ -33,6 +33,36 @@ const DEFAULT_LOAD_HOURS = 0.167;
 const MAX_HISTORY_HOURS = 168;
 type TimeRangeOption = ReturnType<typeof buildLoadTimeRangeOptions>[number];
 
+function InstanceHomeLink() {
+  const { state } = useLocation();
+  const navigate = useNavigate();
+  const homeHistorySteps: number | undefined = state?.homeHistorySteps;
+
+  return (
+    <Link
+      to="/"
+      className="instance-page-back"
+      onClick={(event) => {
+        if (
+          !homeHistorySteps ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.altKey ||
+          event.shiftKey
+        ) {
+          return;
+        }
+        event.preventDefault();
+        navigate(-homeHistorySteps);
+      }}
+    >
+      <ChevronLeft size={14} />
+      返回
+    </Link>
+  );
+}
+
 function RangeSelector({
   ranges,
   value,
@@ -61,6 +91,8 @@ function RangeSelector({
 
 export function Instance() {
   const { uuid, slug } = useParams<{ uuid: string; slug: string }>();
+  const { state: navigationState } = useLocation();
+  const homeHistorySteps: number | undefined = navigationState?.homeHistorySteps;
   const allNodes = useAllNodeMeta();
   const slugMatches = slug ? findNodesBySlug(allNodes, slug) : [];
   const isAmbiguousSlug = slugMatches.length > 1;
@@ -162,10 +194,7 @@ export function Instance() {
   if (isAmbiguousSlug) {
     return (
       <div className="flex flex-col gap-5 py-2">
-        <Link to="/" className="instance-page-back">
-          <ChevronLeft size={14} />
-          返回
-        </Link>
+        <InstanceHomeLink />
         <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-center">
           <div className="text-[15px] font-semibold text-(--text-primary)">
             主机名重复，无法唯一定位实例
@@ -178,6 +207,7 @@ export function Instance() {
               <Link
                 key={node.uuid}
                 to={`/server/${encodeURIComponent(node.uuid)}`}
+                state={homeHistorySteps ? { homeHistorySteps: homeHistorySteps + 1 } : undefined}
                 className="flex items-center justify-between gap-3 rounded-xl border border-(--hairline) bg-(--bg-card) px-4 py-3 text-left transition-colors hover:border-(--accent-500)"
               >
                 <span className="min-w-0 truncate text-[13px] font-medium text-(--text-primary)">
@@ -202,10 +232,7 @@ export function Instance() {
         : null;
     return (
       <div className="flex flex-col gap-5 py-2">
-        <Link to="/" className="instance-page-back">
-          <ChevronLeft size={14} />
-          返回
-        </Link>
+        <InstanceHomeLink />
         <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-center">
           {message ? (
             <>
@@ -224,13 +251,7 @@ export function Instance() {
 
   return (
     <div className="flex flex-col gap-5 py-2">
-      <Link
-        to="/"
-        className="instance-page-back"
-      >
-        <ChevronLeft size={14} />
-        返回
-      </Link>
+      <InstanceHomeLink />
       <InstanceDetails
         uuid={resolvedUuid}
         moduleOrder={visibleDetailModuleOrder}
