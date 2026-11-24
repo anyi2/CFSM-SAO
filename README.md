@@ -2,7 +2,7 @@
 
 <p>
   <a href="https://github.com/anyi2/CFSM-SAO/actions/workflows/build-theme.yml"><img src="https://github.com/anyi2/CFSM-SAO/actions/workflows/build-theme.yml/badge.svg?branch=main" alt="Build theme"></a>
-  <img src="https://img.shields.io/badge/version-v2026.11.19-blue" alt="Version v2026.11.19">
+  <img src="https://img.shields.io/github/package-json/v/anyi2/CFSM-SAO?label=version" alt="Version">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
   <a href="https://github.com/WAOR/CFSM-SAO"><img src="https://img.shields.io/badge/upstream-WAOR%2FCFSM--SAO-64748b" alt="Upstream WAOR CFSM-SAO"></a>
 </p>
@@ -35,6 +35,7 @@ Anyi2 基于 [WAOR/CFSM-SAO](https://github.com/WAOR/CFSM-SAO) 持续维护，�
 - [兼容性与功能边界](#兼容性与功能边界)
 - [本地开发](#本地开发)
 - [质量检查与发布](#质量检查与发布)
+- [版本策略](#版本策略)
 - [参与贡献](#参与贡献)
 - [上游项目与致谢](#上游项目与致谢)
 - [许可证](#许可证)
@@ -201,6 +202,10 @@ API_BASE=https://your-cfsm.example
 - 当前版本更新日志检查。
 
 PR 合并到 `main` 后，GitHub Actions 会构建静态主题并发布到 `dist`。该分支是自动生成的发布产物，请勿手工修改。
+
+## 版本策略
+
+本仓库独立使用 CalVer 日期版本号（`YYYY.MM.DD`），不与 WAOR 上游的 SemVer 版本号绑定。每次正式合并都更新当前版本的 `CHANGELOG.md`，由构建工作流生成正式主题版本说明。详见 [VERSIONING.md](./VERSIONING.md) 和 [CHANGELOG.md](./CHANGELOG.md)。
 
 ## 参与贡献
 
